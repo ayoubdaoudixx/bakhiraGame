@@ -63,6 +63,17 @@ export class Enemy {
       this.vx *= 0.96;
       return;
     }
+
+    if (!this.audioPlayed && this.audioAppear) {
+      const px = world.player.x + world.player.w/2;
+      const myCx = this.x + this.w/2;
+      const dist = Math.abs(px - myCx);
+      if (dist < 800) {
+        world.audio.play(this.audioAppear);
+        this.audioPlayed = true;
+      }
+    }
+
     if (this.flash > 0) this.flash -= dt;
     if (this.stunT > 0) this.stunT -= dt;
     this.bounceT += dt;
