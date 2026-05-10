@@ -16,7 +16,7 @@ export const LEVEL1 = {
   spawn: { x: 80, y: GROUND_Y - 120 },
   goal: { x: W - 220, y: GROUND_Y - 200, w: 60, h: 200 },
   bossSpawn: { x: W - 460, y: GROUND_Y - 220 },
-  bossTriggerX: W - 900,
+  bossTriggerX: W - 600,
 
   // Continuous floor with two small gaps (down from five). Easier to navigate.
   platforms: [
@@ -66,7 +66,7 @@ export const LEVEL1 = {
   enemies: [
     { id: 'enemy1', x: 700,  y: GROUND_Y - 102, patrolMin: 600,  patrolMax: 900,  audioAppear: 'wld_fayza', audioDefeat: 'l7w_bamos' },
     { id: 'enemy2', x: 1500, y: GROUND_Y - 102, patrolMin: 1200, patrolMax: 1800, audioAppear: 'wa_3la_krita', audioDefeat: 'finition' },
-    { id: 'enemy3', x: 2700, y: GROUND_Y - 102, audioAppear: 'bnsnss', audioDefeat: 'bnsns_hziti_lqlwa' },
+    { id: 'enemy3', x: 2200, y: GROUND_Y - 102, audioAppear: 'bnsnss', audioDefeat: 'bnsns_hziti_lqlwa' },
     { id: 'enemy1', x: 3500, y: GROUND_Y - 102, patrolMin: 3380, patrolMax: 3760, audioAppear: 'wld_fayza', audioDefeat: 'l7w_bamos' },
   ],
 
