@@ -1,0 +1,100 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>Bakhira Game</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Anton&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --ink:#04060b;
+    --ink-2:#0a0f1a;
+    --neon:#ff2a55;
+    --neon-2:#22e1ff;
+    --gold:#ffcc33;
+    --bone:#e8eef7;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;padding:0;height:100%;background:var(--ink);color:var(--bone);overflow:hidden;font-family:'JetBrains Mono',monospace;}
+  body{
+    display:flex;align-items:center;justify-content:center;
+    background:
+      radial-gradient(1200px 600px at 50% 20%, rgba(255,42,85,.10), transparent 70%),
+      radial-gradient(900px 500px at 80% 90%, rgba(34,225,255,.08), transparent 70%),
+      linear-gradient(180deg,#04060b 0%, #02030a 100%);
+  }
+  #stage{
+    position:relative;
+    width:100vw;height:100vh;
+    overflow:hidden;
+  }
+  canvas{
+    display:block;
+    width:100%;height:100%;
+    image-rendering:pixelated;
+    image-rendering:crisp-edges;
+    background:#000;
+  }
+  /* faint scanline + vignette overlay */
+  #stage::after{
+    content:"";position:absolute;inset:0;pointer-events:none;
+    background:
+      repeating-linear-gradient(0deg, rgba(255,255,255,.025) 0 1px, transparent 1px 3px),
+      radial-gradient(120% 80% at 50% 50%, transparent 55%, rgba(0,0,0,.55) 100%);
+    mix-blend-mode:overlay;
+  }
+  #boot{
+    position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;
+    z-index:5; text-align:center; gap:18px;
+    background:linear-gradient(180deg,#02030a 0%, #04060b 100%);
+    transition:opacity .6s ease;
+  }
+  #boot.hidden{opacity:0;pointer-events:none}
+  #boot h1{
+    font-family:'Anton','Bebas Neue',sans-serif;
+    font-size:clamp(48px,9vw,140px);
+    letter-spacing:.04em;
+    margin:0; line-height:.9;
+    background:linear-gradient(180deg,#fff 0%, #ff2a55 60%, #7a0a1f 100%);
+    -webkit-background-clip:text; background-clip:text; color:transparent;
+    text-shadow:0 0 30px rgba(255,42,85,.25);
+  }
+  #boot h1 .small{display:block; font-size:.28em; letter-spacing:.5em; color:#22e1ff; -webkit-text-fill-color:#22e1ff; margin-bottom:.5em}
+  #boot p{max-width:560px;color:#9aa3b2;letter-spacing:.06em;font-size:13px}
+  #boot button{
+    margin-top:8px;
+    background:transparent; color:var(--bone);
+    border:1px solid rgba(232,238,247,.25);
+    padding:14px 28px;
+    font-family:'Anton',sans-serif; letter-spacing:.3em; font-size:18px;
+    cursor:pointer; position:relative; overflow:hidden;
+    transition:transform .15s ease, border-color .15s ease, color .15s ease;
+  }
+  #boot button:hover{ color:#04060b; border-color:var(--neon); }
+  #boot button::before{
+    content:""; position:absolute; inset:0; background:var(--neon);
+    transform:translateY(101%); transition:transform .25s ease; z-index:-1;
+  }
+  #boot button:hover::before{ transform:translateY(0); }
+  #boot .hint{font-size:13px;color:#ffffff;letter-spacing:.18em;font-weight:600;text-shadow:0 2px 8px rgba(0,0,0,.6);max-width:760px;line-height:1.6}
+  #boot .hint b{color:#ffcc33;font-weight:800;font-family:'Anton',sans-serif;letter-spacing:.05em;font-size:15px}
+  #loadbar{width:280px;height:2px;background:rgba(255,255,255,.08);overflow:hidden;margin-top:12px}
+  #loadbar > div{height:100%;width:0;background:linear-gradient(90deg,#22e1ff,#ff2a55);transition:width .2s ease}
+</style>
+</head>
+<body>
+  <div id="stage">
+    <canvas id="game" width="1280" height="720"></canvas>
+    <div id="boot">
+      <h1><span class="small">A Stadium. A Curse.</span>Bakhira<br>Game</h1>
+      <p>The crowd is gone. The lights have died. Take back what was stolen.</p>
+      <div id="loadbar"><div></div></div>
+      <button id="startBtn" disabled>LOADING…</button>
+      <div class="hint"><b>← →</b> MOVE &nbsp;·&nbsp; <b>↑</b> JUMP (×2) &nbsp;·&nbsp; <b>SPACE</b> ATTACK &nbsp;·&nbsp; <b>K</b> SWAP &nbsp;·&nbsp; <b>ESC</b> PAUSE</div>
+    </div>
+  </div>
+  <script type="module" src="./game.js"></script>
+</body>
+</html>
