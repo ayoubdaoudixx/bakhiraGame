@@ -78,6 +78,11 @@ export class Cutscene {
     this.t += dt;
     this.lightT += dt;
     this.particles.update(dt);
+    // play tense music at start of intro cutscene (once)
+    if (this.kind === 'intro' && this.t < 0.1 && !this.audioTriggered['tenseMusic']) {
+      this.audioTriggered['tenseMusic'] = true;
+      if (this.audio) this.audio.play('tense_music', { volume: 0.3 });
+    }
     if (input && input.pressed('skip')) this.skipped = true;
     if (this.skipped || this.t >= this.duration) {
       this.done = true;

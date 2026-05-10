@@ -62,10 +62,10 @@ export const LEVEL1 = {
   // No wind/fog zones — keep level 1 readable.
   zones: [],
 
-  // Lighter enemy load: 3 patrols + 1 ranged.
+  // Enemy variety: patrol, chase, and ranged types.
   enemies: [
     { id: 'enemy1', x: 700,  y: GROUND_Y - 102, patrolMin: 600,  patrolMax: 900,  audioAppear: 'wld_fayza', audioDefeat: 'l7w_bamos' },
-    { id: 'enemy1', x: 1700, y: GROUND_Y - 102, patrolMin: 1500, patrolMax: 2080, audioAppear: 'wa_3la_krita', audioDefeat: 'finition' },
+    { id: 'enemy2', x: 1500, y: GROUND_Y - 102, patrolMin: 1200, patrolMax: 1800, audioAppear: 'wa_3la_krita', audioDefeat: 'finition' },
     { id: 'enemy3', x: 2700, y: GROUND_Y - 102, audioAppear: 'bnsnss', audioDefeat: 'bnsns_hziti_lqlwa' },
     { id: 'enemy1', x: 3500, y: GROUND_Y - 102, patrolMin: 3380, patrolMax: 3760, audioAppear: 'wld_fayza', audioDefeat: 'l7w_bamos' },
   ],

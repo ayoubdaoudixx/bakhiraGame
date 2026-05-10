@@ -16,6 +16,7 @@ import { Cutscene } from './ui/cutscene.js';
 const STATES = Object.freeze({
   INTRO: 'INTRO', CUTSCENE: 'CUTSCENE', PLAYING: 'PLAYING',
   PAUSED: 'PAUSED', BOSS: 'BOSS', GAME_OVER: 'GAME_OVER', WIN: 'WIN', VICTORY: 'VICTORY',
+  GOAL_REACHED: 'GOAL_REACHED', STAGE_TRANSITION: 'STAGE_TRANSITION',
 });
 
 class Game {
@@ -44,6 +45,14 @@ class Game {
     this.gameOverT = 0;
     this.winT = 0;
     this.replayBtn = null;
+    this.congratsBtn = null;
+    this.nextStageBtn = null;
+    this.returnBtn = null;
+    this.exitBtn = null;
+    this.goalReached = false;
+    this.stageTransitionT = 0;
+    this.backgroundMusicLooping = false;
+    this.backgroundMusicTimeout = null;
 
     canvas.addEventListener('pointerdown', (e) => this._onClick(e));
 
@@ -61,6 +70,7 @@ class Game {
     Assets.loadImage('face_enemy3', '/assets/enemies/enemy3-face.jpeg', 'E3');
     Assets.loadImage('bossLvl1',    '/assets/characters/boss-Lvl1.png', 'BOSS');
     Assets.loadImage('bgLvl1',      '/assets/bg-lvl1.jpg', 'BG');
+    Assets.loadImage('fcb',         '/assets/fcb.jpg', 'FCB');
 
     // register all audio tracks
     this.audio.register('rwina', '/assets/audios/1- rwina.mp3');
@@ -76,6 +86,8 @@ class Game {
     this.audio.register('l7wa', '/assets/audios/1- L7wa.mp3');
     this.audio.register('carayou_pouuwa_lghwat', '/assets/audios/1- carayou pouuwa lghwat.mp3');
     this.audio.register('lhajwi', '/assets/audios/1-lhajwi.mp3');
+    this.audio.register('tense_music', '/assets/audios/Tense Music Look Behind You.mp3');
+    this.audio.register('9alawane_behlawane', '/assets/audios/9alawane Behlawane Bakhira D Achraf Official Audio.mp3');
   }
 
   startIntro() {
@@ -95,6 +107,11 @@ class Game {
     this.hud = new HUD(this.player, this.world);
     this.hud.showToast('STAGE I — THE STOLEN GAME', 2.5);
     this.audio.play('l7w_bamos');
+    // play ambient background song at low volume - looping
+    setTimeout(() => {
+      this.backgroundMusicLooping = true;
+      this._playBackgroundMusicLoop();
+    }, 2500);
     this.state = STATES.PLAYING;
   }
 
@@ -118,6 +135,34 @@ class Game {
       const sy = (e.clientY - rect.top) * (this.canvas.height / rect.height);
       const b = this.replayBtn;
       if (b && sx > b.x && sx < b.x+b.w && sy > b.y && sy < b.y+b.h) {
+        this.startIntro();
+      }
+    }
+    if (this.state === STATES.GOAL_REACHED) {
+      const rect = this.canvas.getBoundingClientRect();
+      const sx = (e.clientX - rect.left) * (this.canvas.width / rect.width);
+      const sy = (e.clientY - rect.top) * (this.canvas.height / rect.height);
+      if (this.nextStageBtn && sx > this.nextStageBtn.x && sx < this.nextStageBtn.x+this.nextStageBtn.w &&
+          sy > this.nextStageBtn.y && sy < this.nextStageBtn.y+this.nextStageBtn.h) {
+        this.state = STATES.STAGE_TRANSITION;
+        this.stageTransitionT = 0;
+        this.audio.play('l7wa', { volume: 0.7 });
+      }
+      if (this.returnBtn && sx > this.returnBtn.x && sx < this.returnBtn.x+this.returnBtn.w &&
+          sy > this.returnBtn.y && sy < this.returnBtn.y+this.returnBtn.h) {
+        this.startIntro(); // return to menu (restart for now)
+      }
+    }
+    if (this.state === STATES.STAGE_TRANSITION) {
+      const rect = this.canvas.getBoundingClientRect();
+      const sx = (e.clientX - rect.left) * (this.canvas.width / rect.width);
+      const sy = (e.clientY - rect.top) * (this.canvas.height / rect.height);
+      // check exit button
+      if (this.exitBtn && sx > this.exitBtn.x && sx < this.exitBtn.x+this.exitBtn.w &&
+          sy > this.exitBtn.y && sy < this.exitBtn.y+this.exitBtn.h) {
+        this.startIntro(); // exit to intro/menu
+      } else {
+        // click anywhere else to continue to next stage
         this.startIntro();
       }
     }
@@ -166,6 +211,7 @@ class Game {
       if (this.cutscene) this.cutscene.update(dt, Input);
       return;
     }
+    if (this.state === STATES.GOAL_REACHED || this.state === STATES.STAGE_TRANSITION) return;
 
     if (this.state === STATES.PLAYING || this.state === STATES.BOSS) {
       this.player.update(dt, this.world);
@@ -207,11 +253,14 @@ class Game {
         this.gameOverT = 0;
       }
 
-      // goal reached (and boss already defeated would be required, but level1 ends with boss)
-      // For redundancy, if player reaches the goal area without triggering boss, trigger it.
+      // goal reached - show congratulations screen
       const g = this.world.goal;
-      if (!this.boss && this.world.bossPending === undefined && this.player.x + this.player.w > g.x && this.player.x < g.x + g.w) {
-        // already covered by bossTriggerX — placeholder
+      if (!this.goalReached && this.player.x + this.player.w > g.x && this.player.x < g.x + g.w) {
+        this.goalReached = true;
+        this.backgroundMusicLooping = false;
+        if (this.backgroundMusicTimeout) clearTimeout(this.backgroundMusicTimeout);
+        this.state = STATES.GOAL_REACHED;
+        this.audio.play('finition', { volume: 0.8 });
       }
     }
   }
@@ -263,6 +312,8 @@ class Game {
     if (this.state === STATES.PAUSED) this._drawPause();
     if (this.state === STATES.GAME_OVER) this._drawGameOver();
     if (this.state === STATES.WIN) this._drawWin();
+    if (this.state === STATES.GOAL_REACHED) this._drawGoalReached();
+    if (this.state === STATES.STAGE_TRANSITION) this._drawStageTransition();
   }
 
   _drawPause() {
@@ -335,6 +386,116 @@ class Game {
     ctx.fillStyle = '#e8eef7';
     ctx.font = 'bold 22px "Anton", sans-serif';
     ctx.fillText('PLAY AGAIN', this.W/2, b.y + 32);
+  }
+
+  _drawGoalReached() {
+    const ctx = this.ctx;
+    // dark backdrop
+    ctx.fillStyle = 'rgba(0,0,0,0.85)';
+    ctx.fillRect(0, 0, this.W, this.H);
+
+    // congratulations message
+    ctx.textAlign = 'center';
+    ctx.fillStyle = '#ffcc33';
+    ctx.font = 'bold 90px "Anton", sans-serif';
+    ctx.fillText('CONGRATULATIONS!', this.W/2, this.H/2 - 80);
+
+    ctx.fillStyle = '#ff2a55';
+    ctx.font = 'bold 28px "Anton", sans-serif';
+    ctx.fillText('YOU REACHED THE GOAL', this.W/2, this.H/2 - 20);
+
+    // score display
+    ctx.fillStyle = '#e8eef7';
+    ctx.font = 'bold 16px "JetBrains Mono", monospace';
+    ctx.fillText('SCORE: ' + this.player.score.toString().padStart(6,'0') + '   ·   COINS: ' + this.player.coins, this.W/2, this.H/2 + 30);
+
+    // next stage button
+    this.nextStageBtn = { x: this.W/2 - 240, y: this.H/2 + 90, w: 200, h: 48 };
+    const nb = this.nextStageBtn;
+    ctx.fillStyle = 'rgba(255,204,51,0.2)';
+    ctx.fillRect(nb.x, nb.y, nb.w, nb.h);
+    ctx.strokeStyle = '#ffcc33';
+    ctx.lineWidth = 2;
+    ctx.strokeRect(nb.x, nb.y, nb.w, nb.h);
+    ctx.fillStyle = '#e8eef7';
+    ctx.font = 'bold 20px "Anton", sans-serif';
+    ctx.fillText('NEXT STAGE', nb.x + nb.w/2, nb.y + 28);
+
+    // return button
+    this.returnBtn = { x: this.W/2 + 40, y: this.H/2 + 90, w: 200, h: 48 };
+    const rb = this.returnBtn;
+    ctx.fillStyle = 'rgba(34,225,255,0.15)';
+    ctx.fillRect(rb.x, rb.y, rb.w, rb.h);
+    ctx.strokeStyle = '#22e1ff';
+    ctx.lineWidth = 2;
+    ctx.strokeRect(rb.x, rb.y, rb.w, rb.h);
+    ctx.fillStyle = '#e8eef7';
+    ctx.font = 'bold 20px "Anton", sans-serif';
+    ctx.fillText('RETURN', rb.x + rb.w/2, rb.y + 28);
+  }
+
+  _playBackgroundMusicLoop() {
+    if (!this.backgroundMusicLooping) return;
+    this.audio.play('9alawane_behlawane', { volume: 0.25 });
+    // restart after ~210 seconds (3.5 minutes - typical song length)
+    this.backgroundMusicTimeout = setTimeout(() => this._playBackgroundMusicLoop(), 210000);
+  }
+
+  _drawStageTransition() {
+    const ctx = this.ctx;
+    // dark backdrop
+    ctx.fillStyle = '#02030a';
+    ctx.fillRect(0, 0, this.W, this.H);
+
+    // display fcb.jpg image
+    const img = Assets.get('fcb');
+    if (Assets.isReal('fcb')) {
+      const aspectImg = img.width / img.height;
+      const aspectView = this.W / this.H;
+      let dw, dh;
+      if (aspectImg > aspectView) {
+        dh = this.H * 0.9;
+        dw = dh * aspectImg;
+      } else {
+        dw = this.W * 0.9;
+        dh = dw / aspectImg;
+      }
+      ctx.drawImage(img, (this.W - dw) / 2, (this.H - dh) / 2, dw, dh);
+    }
+
+    // semi-transparent overlay for text
+    ctx.fillStyle = 'rgba(0,0,0,0.5)';
+    ctx.fillRect(0, 0, this.W, this.H);
+
+    // stage text message
+    ctx.fillStyle = '#ffcc33';
+    ctx.font = 'bold 56px "Anton", sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText('Mrra Jayya nchallah, haay 3liyaaa', this.W/2, this.H/2);
+
+    // exit button
+    this.exitBtn = { x: this.W/2 - 100, y: this.H/2 + 100, w: 200, h: 48 };
+    const eb = this.exitBtn;
+    ctx.fillStyle = 'rgba(34,225,255,0.2)';
+    ctx.fillRect(eb.x, eb.y, eb.w, eb.h);
+    ctx.strokeStyle = '#22e1ff';
+    ctx.lineWidth = 2;
+    ctx.strokeRect(eb.x, eb.y, eb.w, eb.h);
+    ctx.fillStyle = '#e8eef7';
+    ctx.font = 'bold 20px "Anton", sans-serif';
+    ctx.fillText('EXIT', eb.x + eb.w/2, eb.y + 28);
+
+    // fade in/out effect for continue prompt
+    const fadeAlpha = Math.sin(this.stageTransitionT * 2) * 0.3 + 0.7;
+    ctx.globalAlpha = fadeAlpha;
+
+    // click to continue prompt
+    ctx.fillStyle = '#ffcc33';
+    ctx.font = 'bold 16px "JetBrains Mono", monospace';
+    ctx.textAlign = 'center';
+    ctx.fillText('CLICK TO CONTINUE', this.W/2, this.H - 40);
+
+    ctx.globalAlpha = 1;
   }
 
   start() {
