@@ -12,9 +12,11 @@ import { Boss } from './entities/boss.js';
 import { LEVEL1 } from './levels/level1.js';
 import { HUD } from './ui/hud.js';
 import { Cutscene } from './ui/cutscene.js';
+import { ComicIntro, StageSelect, WeaponsCatalog } from './ui/screens.js';
 
 const STATES = Object.freeze({
-  INTRO: 'INTRO', CUTSCENE: 'CUTSCENE', PLAYING: 'PLAYING',
+  INTRO: 'INTRO', STORY: 'STORY', STAGE_SELECT: 'STAGE_SELECT', WEAPONS: 'WEAPONS',
+  CUTSCENE: 'CUTSCENE', PLAYING: 'PLAYING',
   PAUSED: 'PAUSED', BOSS: 'BOSS', GAME_OVER: 'GAME_OVER', WIN: 'WIN', VICTORY: 'VICTORY',
   GOAL_REACHED: 'GOAL_REACHED', STAGE_TRANSITION: 'STAGE_TRANSITION',
 });
@@ -36,6 +38,9 @@ class Game {
     this.fixedDt = 1 / 60;
 
     this.cutscene = null;
+    this.story = null;          // ComicIntro instance
+    this.stageSelect = null;    // StageSelect instance
+    this.weapons = null;        // WeaponsCatalog instance
     this.world = null;
     this.player = null;
     this.boss = null;
@@ -60,17 +65,32 @@ class Game {
   }
 
   _preloadCommon() {
-    Assets.loadImage('hero',       '/assets/characters/hero.png',       'HERO');
+    Assets.loadImage('hero',       '/assets/hero.png',                  'HERO');
     Assets.loadImage('villain',    '/assets/characters/villain.jpeg',   'VILLAIN');
     Assets.loadImage('girlfriend', '/assets/characters/girlfriend.png', 'GF');
-    Assets.loadImage('player',     '/assets/characters/main-character.png', 'PLAYER');
+    Assets.loadImage('player',     '/assets/hero.png',                  'PLAYER');
+    Assets.loadImage('castleBg',   '/assets/castle-bg.png',             'CASTLE');
+    Assets.loadImage('stage1Bg',   '/assets/1st-stage-bg.png',          'STAGE1');
     // enemy faces
-    Assets.loadImage('face_enemy1', '/assets/enemies/enemy1-face.jpeg', 'E1');
-    Assets.loadImage('face_enemy2', '/assets/enemies/enemy2-face.jpeg', 'E2');
-    Assets.loadImage('face_enemy3', '/assets/enemies/enemy3-face.jpeg', 'E3');
-    Assets.loadImage('bossLvl1',    '/assets/characters/boss-Lvl1.png', 'BOSS');
-    Assets.loadImage('bgLvl1',      '/assets/bg-lvl1.jpg', 'BG');
+    Assets.loadImage('face_enemy1', '/assets/enemies/enemy1.png', 'E1');
+    Assets.loadImage('face_enemy2', '/assets/enemies/enemy2.png', 'E2');
+    Assets.loadImage('face_enemy3', '/assets/enemies/enemy3.png', 'E3');
+    Assets.loadImage('bossLvl1',    '/assets/enemies/boss-lvl1.png', 'BOSS');
+    Assets.loadImage('bgLvl1',      '/assets/1st-stage-bg.png', 'BG');
     Assets.loadImage('fcb',         '/assets/fcb.jpg', 'FCB');
+
+    // ── Narrative voice tracks (sequential channel) ──
+    this.audio.register('game-start',       '/assets/audios/game-start.mp3');
+    this.audio.register('enemy1-intro',     '/assets/audios/enemy1-intro.mp3');
+    this.audio.register('enemy1-defeat',    '/assets/audios/enemy1-defeat.mp3');
+    this.audio.register('enemy2-intro',     '/assets/audios/enemy2-intro.mp3');
+    this.audio.register('enemy2-defeat',    '/assets/audios/enemy2-defeat.mp3');
+    this.audio.register('enemy3-intro',     '/assets/audios/enemy3-intro.mp3');
+    this.audio.register('enemy3-defeat',    '/assets/audios/enemy3-defeat.mp3');
+    this.audio.register('between-enemies',  '/assets/audios/between enemies.mp3');
+    this.audio.register('boss-lvl1-intro',  '/assets/audios/boss-lv-introl.mp3'); // filename has a typo, alias to a sensible name
+    this.audio.register('boss-lvl1-defeat', '/assets/audios/boss-lvl1-defeat.mp3');
+    this.audio.register('boss-lvl1-defeat2','/assets/audios/boss-lvl1-defeat2.mp3');
 
     // register all audio tracks
     this.audio.register('rwina', '/assets/audios/1- rwina.mp3');
@@ -91,27 +111,93 @@ class Game {
   }
 
   startIntro() {
-    this.state = STATES.CUTSCENE;
-    this.cutscene = new Cutscene(this.canvas, 'intro', this.audio, () => {
-      this._startGame();
+    // The chat/intro panels now play before the START button on page load
+    // (see the bootstrap below). Clicking START goes straight to gameplay.
+    this._startGame();
+  }
+
+  // Auto-played once on page load, before the boot screen is revealed.
+  showStory(onDone) {
+    this._teardownMenuScreens();
+    this._stopBgMusic();
+    this.state = STATES.STORY;
+    this.story = new ComicIntro(this.canvas, this.audio, () => {
+      this.story && this.story.destroy(); this.story = null;
+      this.state = STATES.INTRO;
+      if (onDone) onDone();
     });
+  }
+
+  showStageSelect() {
+    this._teardownMenuScreens();
+    this._stopBgMusic();
+    this.state = STATES.STAGE_SELECT;
+    this.stageSelect = new StageSelect(this.canvas, this.audio,
+      (idx) => {
+        this.stageSelect && this.stageSelect.destroy(); this.stageSelect = null;
+        // Only Stage 01 ships; anything else falls back to Stage 01.
+        this._startGame();
+      },
+      () => {
+        this.stageSelect && this.stageSelect.destroy(); this.stageSelect = null;
+        this._returnToBoot();
+      });
+  }
+
+  showWeapons() {
+    this._teardownMenuScreens();
+    this._stopBgMusic();
+    this.state = STATES.WEAPONS;
+    this.weapons = new WeaponsCatalog(this.canvas, this.audio, () => {
+      this.weapons && this.weapons.destroy(); this.weapons = null;
+      this._returnToBoot();
+    });
+  }
+
+  _teardownMenuScreens() {
+    if (this.story)       { this.story.destroy();       this.story = null; }
+    if (this.stageSelect) { this.stageSelect.destroy(); this.stageSelect = null; }
+    if (this.weapons)     { this.weapons.destroy();     this.weapons = null; }
+    if (this.cutscene)    { this.cutscene.destroy();    this.cutscene = null; }
+  }
+
+  _stopBgMusic() {
+    this.backgroundMusicLooping = false;
+    if (this.backgroundMusicTimeout) {
+      clearTimeout(this.backgroundMusicTimeout);
+      this.backgroundMusicTimeout = null;
+    }
+  }
+
+  _returnToBoot() {
+    this._teardownMenuScreens();
+    this._stopBgMusic();
+    this.state = STATES.INTRO;
+    const boot = document.getElementById('boot');
+    if (boot) {
+      boot.style.display = 'flex';
+      // next frame to re-enable transition
+      requestAnimationFrame(() => boot.classList.remove('hidden'));
+    }
   }
 
   _startGame() {
     if (this.cutscene) { this.cutscene.destroy(); this.cutscene = null; }
+    this.boss = null;
+    this.goalReached = false;
+    // Wipe any pending narrative voice lines from a previous attempt so the
+    // new stage-start audio is the FIRST thing the player hears.
+    if (this.audio.clearVoiceQueue) this.audio.clearVoiceQueue();
     this.world = new World(LEVEL1, this.audio, this.camera);
     this.player = new Player(LEVEL1.spawn.x, LEVEL1.spawn.y);
     this.world.setPlayer(this.player);
     this.camera.setWorld(LEVEL1.bounds.w, LEVEL1.bounds.h);
     this.camera.follow(this.player);
     this.hud = new HUD(this.player, this.world);
-    this.hud.showToast('STAGE I — THE STOLEN GAME', 2.5);
-    this.audio.play('l7w_bamos');
-    // play ambient background song at low volume - looping
-    setTimeout(() => {
-      this.backgroundMusicLooping = true;
-      this._playBackgroundMusicLoop();
-    }, 2500);
+    this.hud.showToast('STAGE I — THE CURSED FOREST', 2.5);
+    // Narrative sequence kicks off with the stage-start clip. Every subsequent
+    // intro/defeat/between voice line queues behind it on the same channel.
+    this.audio.playSequential('game-start');
     this.state = STATES.PLAYING;
   }
 
@@ -122,9 +208,8 @@ class Game {
     this.bossEntranceShakeT = 1.0;
     this.camera.shake(20, 0.8);
     this.hud.showToast(this.boss.def.name.toUpperCase(), 2.5);
-    // play boss entrance audio with proper spacing
-    this.audio.play('kbir_lqhab');
-    setTimeout(() => this.audio.play('bani_kalboun_layn3l_zaml_bok'), 2000);
+    // Boss intro narration intentionally muted for this iteration — we'll
+    // add it back when we're past the enemy1 verification step.
     this.state = STATES.BOSS;
   }
 
@@ -150,7 +235,7 @@ class Game {
       }
       if (this.returnBtn && sx > this.returnBtn.x && sx < this.returnBtn.x+this.returnBtn.w &&
           sy > this.returnBtn.y && sy < this.returnBtn.y+this.returnBtn.h) {
-        this.startIntro(); // return to menu (restart for now)
+        this.showStageSelect(); // MAP — go straight to stage select
       }
     }
     if (this.state === STATES.STAGE_TRANSITION) {
@@ -175,6 +260,9 @@ class Game {
         this.state = STATES.PAUSED;
       } else if (this.state === STATES.PAUSED) {
         this.state = this.prevState || STATES.PLAYING;
+      } else if (this.state === STATES.STAGE_SELECT || this.state === STATES.WEAPONS) {
+        // ESC backs out of menu screens to the title.
+        this._returnToBoot();
       }
     }
     if ((this.state === STATES.GAME_OVER || this.state === STATES.WIN) && Input.pressed('skip')) {
@@ -200,6 +288,18 @@ class Game {
   }
 
   _update(dt) {
+    if (this.state === STATES.STORY && this.story) {
+      this.story.update(dt, Input);
+      return;
+    }
+    if (this.state === STATES.STAGE_SELECT && this.stageSelect) {
+      this.stageSelect.update(dt, Input);
+      return;
+    }
+    if (this.state === STATES.WEAPONS && this.weapons) {
+      this.weapons.update(dt, Input);
+      return;
+    }
     if (this.state === STATES.CUTSCENE && this.cutscene) {
       this.cutscene.update(dt, Input);
       return;
@@ -214,37 +314,38 @@ class Game {
     if (this.state === STATES.GOAL_REACHED || this.state === STATES.STAGE_TRANSITION) return;
 
     if (this.state === STATES.PLAYING || this.state === STATES.BOSS) {
+      this.player.diedThisFrame = false;
       this.player.update(dt, this.world);
-      // enemies
-      for (const e of this.world.enemies) {
-        // play enemy audio when first encountered
-        if (!e.audioPlayed && e.audioAppear && this.audio) {
-          e.audioPlayed = true;
-          this.audio.play(e.audioAppear);
-        }
-        e.update(dt, this.world);
-      }
+      // Enemies update themselves. The intro voice line is queued from
+      // entities/enemy.js based on actual on-screen visibility — DO NOT
+      // pre-empt that here with a distance-less audio.play, or the enemy's
+      // `audioPlayed` flag flips to true on frame 1 (before it's visible) and
+      // the real intro is silently skipped.
+      for (const e of this.world.enemies) e.update(dt, this.world);
       if (this.boss) this.boss.update(dt, this.world);
       this.world.update(dt);
       this.camera.update(dt);
       this.hud.update(dt);
 
+      // Death in the boss arena = full level restart from the very beginning.
+      // Any lethal hit while sealed inside the room resets the whole stage.
+      if (this.world.inBossArena && this.player.diedThisFrame && !this.player.dead) {
+        this.hud.showToast('SEALED. STAGE RESTARTS.', 1.6);
+        this._startGame();
+        return;
+      }
+
       // boss trigger
       if (!this.boss && this.world.bossPending) {
         this._spawnBoss();
       }
-      // boss defeated → win cutscene
+      // Boss defeated → straight to the stage tally screen. Defeat audios
+      // intentionally muted for this iteration.
       if (this.boss && this.boss.dead && this.boss.deathT <= 0) {
-        // play victory audio with proper spacing
-        this.audio.play('finition');
-        setTimeout(() => this.audio.play('l7wa'), 2000);
         this.boss = null;
         this.world.setBoss(null);
-        this.state = STATES.VICTORY;
-        this.winT = 0;
-        this.cutscene = new Cutscene(this.canvas, 'victory', this.audio, () => {
-          this.state = STATES.WIN;
-        });
+        this.goalReached = true;
+        this.state = STATES.GOAL_REACHED;
       }
 
       // player death
@@ -253,9 +354,11 @@ class Game {
         this.gameOverT = 0;
       }
 
-      // goal reached - show congratulations screen
+      // goal reached - only meaningful when the level has a flag (Stage 1 wins
+      // via boss defeat instead, so the goal rect is moved off-screen).
       const g = this.world.goal;
-      if (!this.goalReached && this.player.x + this.player.w > g.x && this.player.x < g.x + g.w) {
+      if (g && g.w > 0 && !this.goalReached &&
+          this.player.x + this.player.w > g.x && this.player.x < g.x + g.w) {
         this.goalReached = true;
         this.backgroundMusicLooping = false;
         if (this.backgroundMusicTimeout) clearTimeout(this.backgroundMusicTimeout);
@@ -270,6 +373,18 @@ class Game {
     if (this.state === STATES.INTRO) {
       // boot screen lives in DOM; canvas just shows a moody backdrop.
       this.renderer.drawBackground(0, 0.016);
+      return;
+    }
+    if (this.state === STATES.STORY && this.story) {
+      this.story.draw();
+      return;
+    }
+    if (this.state === STATES.STAGE_SELECT && this.stageSelect) {
+      this.stageSelect.draw();
+      return;
+    }
+    if (this.state === STATES.WEAPONS && this.weapons) {
+      this.weapons.draw();
       return;
     }
     if (this.state === STATES.CUTSCENE && this.cutscene) {
@@ -318,120 +433,176 @@ class Game {
 
   _drawPause() {
     const ctx = this.ctx;
-    ctx.fillStyle = 'rgba(0,0,0,0.65)';
+    ctx.fillStyle = 'rgba(10,10,18,0.78)';
     ctx.fillRect(0, 0, this.W, this.H);
-    ctx.textAlign = 'center';
-    ctx.fillStyle = '#22e1ff';
-    ctx.font = 'bold 96px "Anton", sans-serif';
-    ctx.fillText('PAUSED', this.W/2, this.H/2 - 10);
-    ctx.fillStyle = '#9aa3b2';
-    ctx.font = 'bold 14px "JetBrains Mono", monospace';
-    ctx.fillText('PRESS  P  TO RESUME', this.W/2, this.H/2 + 30);
+    // halftone overlay
+    drawHalftone(ctx, 0, 0, this.W, this.H, 0.18);
+
+    drawComicTitle(ctx, this.W / 2, this.H / 2 - 30, 'PAUSED', {
+      fill: '#f5db7a', stroke: '#0a0a12', shadow: '#6e2153', size: 110,
+    });
+    drawCaptionBox(ctx, this.W / 2, this.H / 2 + 60, 'PRESS  ESC  TO RESUME', { center: true });
   }
 
   _drawGameOver() {
     const ctx = this.ctx;
-    ctx.fillStyle = `rgba(0,0,0,${Math.min(0.85, this.gameOverT)})`;
+    const alpha = Math.min(0.92, this.gameOverT * 1.4);
+    // radial blood backdrop
+    const r = ctx.createRadialGradient(this.W/2, this.H/2, 80, this.W/2, this.H/2, this.W * 0.7);
+    r.addColorStop(0, `rgba(42,14,20,${alpha})`);
+    r.addColorStop(1, `rgba(10,6,8,${alpha})`);
+    ctx.fillStyle = r;
     ctx.fillRect(0, 0, this.W, this.H);
-    ctx.textAlign = 'center';
-    const wob = Math.sin(this.gameOverT * 2) * 4;
-    ctx.fillStyle = '#ff2a55';
-    ctx.font = 'bold 120px "Anton", sans-serif';
-    ctx.fillText('YOU FELL', this.W/2, this.H/2 - 30 + wob);
-    ctx.fillStyle = '#e8eef7';
-    ctx.font = 'italic 18px "JetBrains Mono", monospace';
-    ctx.fillText('but the night is not over.', this.W/2, this.H/2 + 12);
+    drawHalftone(ctx, 0, 0, this.W, this.H, 0.22);
 
-    this.replayBtn = { x: this.W/2 - 110, y: this.H/2 + 50, w: 220, h: 48 };
-    const b = this.replayBtn;
-    ctx.fillStyle = 'rgba(255,42,85,0.15)';
-    ctx.fillRect(b.x, b.y, b.w, b.h);
-    ctx.strokeStyle = '#ff2a55';
-    ctx.lineWidth = 2;
-    ctx.strokeRect(b.x, b.y, b.w, b.h);
-    ctx.fillStyle = '#e8eef7';
-    ctx.font = 'bold 22px "Anton", sans-serif';
-    ctx.fillText('REPLAY', this.W/2, b.y + 32);
-    ctx.fillStyle = '#9aa3b2';
-    ctx.font = 'bold 10px "JetBrains Mono", monospace';
-    ctx.fillText('OR PRESS  ENTER', this.W/2, b.y + b.h + 18);
+    const wob = Math.sin(this.gameOverT * 2) * 3;
+    drawComicTitle(ctx, this.W/2, this.H/2 - 50 + wob, 'STREAM', {
+      fill: '#c8323a', stroke: '#0a0a12', shadow: '#5a0a10', size: 120,
+    });
+    drawComicTitle(ctx, this.W/2, this.H/2 + 60 + wob, 'ENDED.', {
+      fill: '#c8323a', stroke: '#0a0a12', shadow: '#5a0a10', size: 120,
+    });
+
+    drawCaptionBox(ctx, this.W/2, this.H/2 + 140, 'THE TROLLS GOT YOU. SHE\'S STILL IN THERE.', {
+      bg: '#c8323a', fg: '#efe7d3', center: true,
+    });
+
+    this.replayBtn = { x: this.W/2 - 130, y: this.H/2 + 180, w: 260, h: 56 };
+    drawComicButton(ctx, this.replayBtn, '↻ RETRY', { bg: '#c8323a', fg: '#efe7d3' });
+
+    ctx.fillStyle = '#efe7d3';
+    ctx.font = 'bold 11px "Special Elite", monospace';
+    ctx.textAlign = 'center';
+    ctx.fillText('OR PRESS  ENTER  TO TRY AGAIN', this.W/2, this.replayBtn.y + this.replayBtn.h + 26);
   }
 
   _drawWin() {
     const ctx = this.ctx;
-    // dark backdrop with stars
-    ctx.fillStyle = '#02030a';
-    ctx.fillRect(0, 0, this.W, this.H);
+    // backdrop — radial caption/gold starburst over castle
     this.renderer.drawBackground(0, 0.016);
+    ctx.fillStyle = 'rgba(10,10,18,0.82)';
+    ctx.fillRect(0, 0, this.W, this.H);
+    drawStarburst(ctx, this.W/2, this.H/2 - 20, Math.max(this.W, this.H) * 0.7, 0.45);
+    drawHalftone(ctx, 0, 0, this.W, this.H, 0.18);
 
-    ctx.textAlign = 'center';
-    ctx.fillStyle = '#ffcc33';
-    ctx.font = 'bold 110px "Anton", sans-serif';
-    ctx.fillText('STAGE CLEAR', this.W/2, this.H/2 - 20);
-    ctx.fillStyle = '#22e1ff';
-    ctx.font = 'bold 22px "Anton", sans-serif';
-    ctx.fillText('THE NEXT SHADOW WAITS…', this.W/2, this.H/2 + 18);
+    // chip
+    drawChip(ctx, 'STAGE 01 CLEARED', this.W/2, this.H/2 - 160, { center: true, bg: '#f5db7a', fg: '#0a0a12' });
 
-    ctx.fillStyle = '#e8eef7';
-    ctx.font = 'bold 14px "JetBrains Mono", monospace';
-    ctx.fillText('SCORE: ' + this.player.score.toString().padStart(6,'0') + '   ·   COINS: ' + this.player.coins, this.W/2, this.H/2 + 50);
+    drawComicTitle(ctx, this.W/2, this.H/2 - 80, 'KNOCKOUT!', {
+      fill: '#f5db7a', stroke: '#0a0a12', shadow: '#6e2153', size: 110,
+    });
 
-    this.replayBtn = { x: this.W/2 - 110, y: this.H/2 + 80, w: 220, h: 48 };
-    const b = this.replayBtn;
-    ctx.fillStyle = 'rgba(255,204,51,0.15)';
-    ctx.fillRect(b.x, b.y, b.w, b.h);
-    ctx.strokeStyle = '#ffcc33';
-    ctx.lineWidth = 2;
-    ctx.strokeRect(b.x, b.y, b.w, b.h);
-    ctx.fillStyle = '#e8eef7';
-    ctx.font = 'bold 22px "Anton", sans-serif';
-    ctx.fillText('PLAY AGAIN', this.W/2, b.y + 32);
+    // tally panel
+    const panelW = 360, panelH = 130;
+    const px = this.W/2 - panelW/2, py = this.H/2 + 10;
+    drawPaperPanel(ctx, px, py, panelW, panelH);
+    ctx.fillStyle = '#0a0a12';
+    ctx.font = 'bold 13px "Oswald", sans-serif';
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'top';
+    ctx.fillText('STAGE TALLY', px + 16, py + 12);
+
+    const rows = [
+      ['SCORE', this.player.score.toString().padStart(6, '0')],
+      ['COINS', 'x ' + this.player.coins],
+      ['LIVES LEFT', Math.max(0, this.player.lives) + ' / 3'],
+    ];
+    ctx.font = '18px "VT323", monospace';
+    for (let i = 0; i < rows.length; i++) {
+      const ry = py + 38 + i * 22;
+      ctx.fillStyle = '#0a0a12';
+      ctx.textAlign = 'left';
+      ctx.fillText(rows[i][0], px + 16, ry);
+      ctx.textAlign = 'right';
+      ctx.fillText(rows[i][1], px + panelW - 16, ry);
+    }
+    // total separator
+    ctx.fillStyle = '#0a0a12';
+    ctx.fillRect(px + 16, py + panelH - 30, panelW - 32, 2);
+    ctx.font = 'bold 20px "Bangers", sans-serif';
+    ctx.textAlign = 'left';
+    ctx.fillText('TOTAL', px + 16, py + panelH - 8);
+    ctx.textAlign = 'right';
+    ctx.fillStyle = '#c44a8c';
+    ctx.fillText('+ ' + this.player.score.toString().padStart(6, '0'), px + panelW - 16, py + panelH - 8);
+
+    this.replayBtn = { x: this.W/2 - 130, y: py + panelH + 24, w: 260, h: 54 };
+    drawComicButton(ctx, this.replayBtn, '▶ PLAY AGAIN', { bg: '#c8323a', fg: '#efe7d3' });
   }
 
   _drawGoalReached() {
     const ctx = this.ctx;
-    // dark backdrop
-    ctx.fillStyle = 'rgba(0,0,0,0.85)';
+    // backdrop — caption starburst over dark
+    ctx.fillStyle = 'rgba(10,10,18,0.86)';
     ctx.fillRect(0, 0, this.W, this.H);
+    drawStarburst(ctx, this.W/2, this.H/2 - 30, Math.max(this.W, this.H) * 0.75, 0.45);
+    drawHalftone(ctx, 0, 0, this.W, this.H, 0.18);
 
-    // congratulations message
-    ctx.textAlign = 'center';
-    ctx.fillStyle = '#ffcc33';
-    ctx.font = 'bold 90px "Anton", sans-serif';
-    ctx.fillText('CONGRATULATIONS!', this.W/2, this.H/2 - 80);
+    // chip
+    drawChip(ctx, 'STAGE 01 CLEARED', this.W/2, this.H/2 - 220, { center: true, bg: '#f5db7a', fg: '#0a0a12' });
 
-    ctx.fillStyle = '#ff2a55';
-    ctx.font = 'bold 28px "Anton", sans-serif';
-    ctx.fillText('YOU REACHED THE GOAL', this.W/2, this.H/2 - 20);
+    // KNOCKOUT! title
+    drawComicTitle(ctx, this.W/2, this.H/2 - 130, 'KNOCKOUT!', {
+      fill: '#f5db7a', stroke: '#0a0a12', shadow: '#6e2153', size: 116,
+    });
 
-    // score display
-    ctx.fillStyle = '#e8eef7';
-    ctx.font = 'bold 16px "JetBrains Mono", monospace';
-    ctx.fillText('SCORE: ' + this.player.score.toString().padStart(6,'0') + '   ·   COINS: ' + this.player.coins, this.W/2, this.H/2 + 30);
+    // SFX burst BANG! over the corner
+    ctx.save();
+    ctx.translate(this.W/2 + 240, this.H/2 - 170);
+    ctx.rotate(0.16);
+    ctx.font = 'bold 60px "Bangers", sans-serif';
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.lineJoin = 'round';
+    ctx.lineWidth = 5;
+    ctx.strokeStyle = '#0a0a12';
+    ctx.strokeText('BANG!', 4, 4);
+    ctx.fillStyle = '#0a0a12';
+    ctx.fillText('BANG!', 4, 4);
+    ctx.strokeText('BANG!', 0, 0);
+    ctx.fillStyle = '#c8323a';
+    ctx.fillText('BANG!', 0, 0);
+    ctx.restore();
 
-    // next stage button
-    this.nextStageBtn = { x: this.W/2 - 240, y: this.H/2 + 90, w: 200, h: 48 };
-    const nb = this.nextStageBtn;
-    ctx.fillStyle = 'rgba(255,204,51,0.2)';
-    ctx.fillRect(nb.x, nb.y, nb.w, nb.h);
-    ctx.strokeStyle = '#ffcc33';
-    ctx.lineWidth = 2;
-    ctx.strokeRect(nb.x, nb.y, nb.w, nb.h);
-    ctx.fillStyle = '#e8eef7';
-    ctx.font = 'bold 20px "Anton", sans-serif';
-    ctx.fillText('NEXT STAGE', nb.x + nb.w/2, nb.y + 28);
+    // tally panel
+    const panelW = 380, panelH = 180;
+    const px = this.W/2 - panelW/2, py = this.H/2 - 50;
+    drawPaperPanel(ctx, px, py, panelW, panelH);
+    ctx.fillStyle = '#0a0a12';
+    ctx.font = 'bold 13px "Oswald", sans-serif';
+    ctx.textAlign = 'left'; ctx.textBaseline = 'top';
+    ctx.fillText('STAGE TALLY', px + 16, py + 12);
 
-    // return button
-    this.returnBtn = { x: this.W/2 + 40, y: this.H/2 + 90, w: 200, h: 48 };
-    const rb = this.returnBtn;
-    ctx.fillStyle = 'rgba(34,225,255,0.15)';
-    ctx.fillRect(rb.x, rb.y, rb.w, rb.h);
-    ctx.strokeStyle = '#22e1ff';
-    ctx.lineWidth = 2;
-    ctx.strokeRect(rb.x, rb.y, rb.w, rb.h);
-    ctx.fillStyle = '#e8eef7';
-    ctx.font = 'bold 20px "Anton", sans-serif';
-    ctx.fillText('RETURN', rb.x + rb.w/2, rb.y + 28);
+    const totalScore = this.player.score + this.player.coins * 10;
+    const rows = [
+      ['SUB TOKENS', 'x ' + this.player.coins],
+      ['HP REMAINING', this.player.health + ' / ' + this.player.maxHealth],
+      ['LIVES LEFT', Math.max(0, this.player.lives) + ' / 3'],
+      ['SCORE', this.player.score.toString().padStart(6,'0')],
+    ];
+    ctx.font = '18px "VT323", monospace';
+    for (let i = 0; i < rows.length; i++) {
+      const ry = py + 38 + i * 24;
+      ctx.fillStyle = '#0a0a12';
+      ctx.textAlign = 'left';
+      ctx.fillText(rows[i][0], px + 16, ry);
+      ctx.textAlign = 'right';
+      ctx.fillText(rows[i][1], px + panelW - 16, ry);
+    }
+    ctx.fillStyle = '#0a0a12';
+    ctx.fillRect(px + 16, py + panelH - 36, panelW - 32, 2);
+    ctx.font = 'bold 22px "Bangers", sans-serif';
+    ctx.textAlign = 'left';
+    ctx.fillText('TOTAL', px + 16, py + panelH - 12);
+    ctx.textAlign = 'right';
+    ctx.fillStyle = '#c44a8c';
+    ctx.fillText('+ ' + totalScore.toString().padStart(6,'0'), px + panelW - 16, py + panelH - 12);
+
+    // buttons
+    this.nextStageBtn = { x: this.W/2 - 240, y: py + panelH + 22, w: 220, h: 54 };
+    drawComicButton(ctx, this.nextStageBtn, '▶ NEXT STAGE', { bg: '#c8323a', fg: '#efe7d3' });
+
+    this.returnBtn = { x: this.W/2 + 20, y: py + panelH + 22, w: 220, h: 54 };
+    drawComicButton(ctx, this.returnBtn, 'MAP', { bg: '#f5db7a', fg: '#0a0a12' });
   }
 
   _playBackgroundMusicLoop() {
@@ -443,64 +614,181 @@ class Game {
 
   _drawStageTransition() {
     const ctx = this.ctx;
-    // dark backdrop
-    ctx.fillStyle = '#02030a';
-    ctx.fillRect(0, 0, this.W, this.H);
-
-    // display fcb.jpg image
-    const img = Assets.get('fcb');
-    if (Assets.isReal('fcb')) {
-      const aspectImg = img.width / img.height;
+    // castle bg + tint
+    const bg = Assets.get('castleBg');
+    if (Assets.isReal('castleBg')) {
+      const aspectImg = bg.width / bg.height;
       const aspectView = this.W / this.H;
       let dw, dh;
-      if (aspectImg > aspectView) {
-        dh = this.H * 0.9;
-        dw = dh * aspectImg;
-      } else {
-        dw = this.W * 0.9;
-        dh = dw / aspectImg;
-      }
-      ctx.drawImage(img, (this.W - dw) / 2, (this.H - dh) / 2, dw, dh);
+      if (aspectImg > aspectView) { dh = this.H * 1.05; dw = dh * aspectImg; }
+      else { dw = this.W * 1.05; dh = dw / aspectImg; }
+      ctx.drawImage(bg, (this.W - dw) / 2, (this.H - dh) / 2, dw, dh);
+    } else {
+      ctx.fillStyle = '#0d1628';
+      ctx.fillRect(0, 0, this.W, this.H);
     }
-
-    // semi-transparent overlay for text
-    ctx.fillStyle = 'rgba(0,0,0,0.5)';
+    ctx.fillStyle = 'rgba(10,10,18,0.78)';
     ctx.fillRect(0, 0, this.W, this.H);
+    drawHalftone(ctx, 0, 0, this.W, this.H, 0.18);
 
-    // stage text message
-    ctx.fillStyle = '#ffcc33';
-    ctx.font = 'bold 56px "Anton", sans-serif';
-    ctx.textAlign = 'center';
-    ctx.fillText('Mrra Jayya nchallah, haay 3liyaaa', this.W/2, this.H/2);
+    drawChip(ctx, 'INTERMISSION', this.W/2, this.H/2 - 150, { center: true, bg: '#c44a8c', fg: '#efe7d3' });
+    drawComicTitle(ctx, this.W/2, this.H/2 - 60, 'TO BE', {
+      fill: '#f5db7a', stroke: '#0a0a12', shadow: '#6e2153', size: 96,
+    });
+    drawComicTitle(ctx, this.W/2, this.H/2 + 30, 'CONTINUED…', {
+      fill: '#f5db7a', stroke: '#0a0a12', shadow: '#6e2153', size: 96,
+    });
 
-    // exit button
-    this.exitBtn = { x: this.W/2 - 100, y: this.H/2 + 100, w: 200, h: 48 };
-    const eb = this.exitBtn;
-    ctx.fillStyle = 'rgba(34,225,255,0.2)';
-    ctx.fillRect(eb.x, eb.y, eb.w, eb.h);
-    ctx.strokeStyle = '#22e1ff';
-    ctx.lineWidth = 2;
-    ctx.strokeRect(eb.x, eb.y, eb.w, eb.h);
-    ctx.fillStyle = '#e8eef7';
-    ctx.font = 'bold 20px "Anton", sans-serif';
-    ctx.fillText('EXIT', eb.x + eb.w/2, eb.y + 28);
+    this.exitBtn = { x: this.W/2 - 110, y: this.H/2 + 100, w: 220, h: 54 };
+    drawComicButton(ctx, this.exitBtn, 'EXIT', { bg: '#f5db7a', fg: '#0a0a12' });
 
-    // fade in/out effect for continue prompt
     const fadeAlpha = Math.sin(this.stageTransitionT * 2) * 0.3 + 0.7;
+    ctx.save();
     ctx.globalAlpha = fadeAlpha;
-
-    // click to continue prompt
-    ctx.fillStyle = '#ffcc33';
-    ctx.font = 'bold 16px "JetBrains Mono", monospace';
+    ctx.fillStyle = '#f5db7a';
+    ctx.font = '22px "VT323", monospace';
     ctx.textAlign = 'center';
-    ctx.fillText('CLICK TO CONTINUE', this.W/2, this.H - 40);
-
-    ctx.globalAlpha = 1;
+    ctx.fillText('▼ CLICK TO CONTINUE', this.W/2, this.H - 40);
+    ctx.restore();
   }
 
   start() {
     requestAnimationFrame((t) => { this.lastT = t; this.loop(t); });
   }
+}
+
+// ===== Comic-pulp drawing helpers (used by overlay screens) =====
+
+function drawComicTitle(ctx, x, y, text, opts = {}) {
+  const size = opts.size || 96;
+  const fill = opts.fill || '#f5db7a';
+  const stroke = opts.stroke || '#0a0a12';
+  const shadow = opts.shadow || '#6e2153';
+  ctx.save();
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.font = `bold ${size}px "Bangers", "Impact", sans-serif`;
+  ctx.lineJoin = 'round';
+  // shadow stack (offset)
+  ctx.lineWidth = Math.max(4, size * 0.06);
+  ctx.strokeStyle = stroke;
+  ctx.strokeText(text, x + 6, y + 6);
+  ctx.fillStyle = shadow;
+  ctx.fillText(text, x + 6, y + 6);
+  // foreground
+  ctx.strokeText(text, x, y);
+  ctx.fillStyle = fill;
+  ctx.fillText(text, x, y);
+  ctx.restore();
+}
+
+function drawCaptionBox(ctx, x, y, text, opts = {}) {
+  ctx.save();
+  ctx.font = 'bold 14px "Special Elite", monospace';
+  const padX = 14, padY = 8;
+  const m = ctx.measureText(text);
+  const w = Math.ceil(m.width) + padX * 2;
+  const h = 30;
+  const left = opts.center ? x - w / 2 : x;
+  const bg = opts.bg || '#f5db7a';
+  const fg = opts.fg || '#0a0a12';
+  // shadow
+  ctx.fillStyle = '#0a0a12';
+  ctx.fillRect(left + 3, y + 3, w, h);
+  ctx.fillStyle = bg;
+  ctx.fillRect(left, y, w, h);
+  ctx.strokeStyle = '#0a0a12';
+  ctx.lineWidth = 2;
+  ctx.strokeRect(left + 1, y + 1, w - 2, h - 2);
+  ctx.fillStyle = fg;
+  ctx.textAlign = 'left';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(text, left + padX, y + h / 2 + 1);
+  ctx.restore();
+}
+
+function drawChip(ctx, text, x, y, opts = {}) {
+  ctx.save();
+  const font = opts.font || 'bold 13px "Bangers", sans-serif';
+  ctx.font = font;
+  const padX = 10, padY = 4;
+  const m = ctx.measureText(text);
+  const w = Math.ceil(m.width) + padX * 2;
+  const h = 22;
+  const left = opts.center ? x - w / 2 : x;
+  const bg = opts.bg || '#0a0a12';
+  const fg = opts.fg || '#efe7d3';
+  ctx.fillStyle = '#0a0a12';
+  ctx.fillRect(left, y, w, h);
+  ctx.fillStyle = bg;
+  ctx.fillRect(left + 2, y + 2, w - 4, h - 4);
+  ctx.fillStyle = fg;
+  ctx.textAlign = 'left';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(text, left + padX, y + h / 2 + 1);
+  ctx.restore();
+}
+
+function drawComicButton(ctx, rect, label, opts = {}) {
+  const { x, y, w, h } = rect;
+  const bg = opts.bg || '#c8323a';
+  const fg = opts.fg || '#efe7d3';
+  // drop shadow
+  ctx.fillStyle = '#0a0a12';
+  ctx.fillRect(x + 4, y + 4, w, h);
+  ctx.fillStyle = bg;
+  ctx.fillRect(x, y, w, h);
+  ctx.strokeStyle = '#0a0a12';
+  ctx.lineWidth = 3;
+  ctx.strokeRect(x + 1.5, y + 1.5, w - 3, h - 3);
+  ctx.fillStyle = fg;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.font = 'bold 22px "Bangers", sans-serif';
+  ctx.fillText(label, x + w / 2, y + h / 2 + 1);
+}
+
+function drawPaperPanel(ctx, x, y, w, h) {
+  ctx.fillStyle = '#0a0a12';
+  ctx.fillRect(x + 5, y + 5, w, h);
+  ctx.fillStyle = '#efe7d3';
+  ctx.fillRect(x, y, w, h);
+  ctx.strokeStyle = '#0a0a12';
+  ctx.lineWidth = 3;
+  ctx.strokeRect(x + 1.5, y + 1.5, w - 3, h - 3);
+}
+
+function drawHalftone(ctx, x, y, w, h, alpha = 0.2) {
+  ctx.save();
+  ctx.globalAlpha = alpha;
+  const step = 6;
+  ctx.fillStyle = '#0a0a12';
+  for (let yy = y; yy < y + h; yy += step) {
+    for (let xx = x; xx < x + w; xx += step) {
+      ctx.beginPath();
+      ctx.arc(xx, yy, 1, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
+  ctx.restore();
+}
+
+function drawStarburst(ctx, cx, cy, radius, alpha = 0.5) {
+  ctx.save();
+  ctx.globalAlpha = alpha;
+  ctx.translate(cx, cy);
+  const slices = 36;
+  for (let i = 0; i < slices; i++) {
+    ctx.beginPath();
+    ctx.moveTo(0, 0);
+    const a1 = (i / slices) * Math.PI * 2;
+    const a2 = ((i + 1) / slices) * Math.PI * 2;
+    ctx.arc(0, 0, radius, a1, a2);
+    ctx.closePath();
+    ctx.fillStyle = i % 2 === 0 ? '#f5db7a' : '#e8c652';
+    ctx.fill();
+  }
+  ctx.restore();
 }
 
 // --- Bootstrap ---
@@ -526,6 +814,11 @@ const boot = document.getElementById('boot');
 const startBtn = document.getElementById('startBtn');
 const loadbar = document.querySelector('#loadbar > div');
 
+function setStartLabel(text) {
+  if (!startBtn) return;
+  startBtn.innerHTML = `<span class="arrow">▶</span> ${text}`;
+}
+
 let progressed = false;
 const update = () => {
   const p = Math.max(Assets.progress(), 0);
@@ -533,19 +826,44 @@ const update = () => {
   if (p >= 1 && !progressed) {
     progressed = true;
     startBtn.disabled = false;
-    startBtn.textContent = 'BEGIN';
+    setStartLabel('START NEW STREAM');
   }
 };
 Assets.onProgress = update;
 
 // Allow start regardless of progress after a short timeout, since placeholders are valid.
 setTimeout(() => {
-  startBtn.disabled = false;
-  if (startBtn.textContent === 'LOADING…') startBtn.textContent = 'BEGIN';
+  if (!progressed) {
+    progressed = true;
+    startBtn.disabled = false;
+    setStartLabel('START NEW STREAM');
+  }
 }, 1200);
 
-startBtn.addEventListener('click', () => {
+function hideBoot() {
   boot.classList.add('hidden');
   setTimeout(() => boot.style.display = 'none', 600);
+}
+
+// Boot/menu screen is the FIRST thing the user sees on launch — no story
+// scene plays before it. START goes straight into gameplay.
+startBtn.addEventListener('click', () => {
+  hideBoot();
   game.startIntro();
 });
+
+const stageBtn = document.getElementById('stageBtn');
+if (stageBtn) {
+  stageBtn.addEventListener('click', () => {
+    hideBoot();
+    game.showStageSelect();
+  });
+}
+
+const weaponsBtn = document.getElementById('weaponsBtn');
+if (weaponsBtn) {
+  weaponsBtn.addEventListener('click', () => {
+    hideBoot();
+    game.showWeapons();
+  });
+}

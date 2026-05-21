@@ -48,11 +48,11 @@ export class Cutscene {
     this.lightT = 0;
     this.audioTriggered = {};
 
-    // Asset preloads — main-character is now the protagonist sprite (was hero.png).
-    Assets.loadImage('mainChar',   '/assets/characters/main-character.png', 'HERO');
+    // Asset preloads — hero.png is the protagonist sprite for cutscenes too.
+    Assets.loadImage('mainChar',   '/assets/hero.png',                      'HERO');
     Assets.loadImage('villain',    '/assets/characters/villain.jpeg',       'VILLAIN');
     Assets.loadImage('girlfriend', '/assets/characters/girlfriend.png',     'GF');
-    Assets.loadImage('bgLvl1',     '/assets/bg-lvl1.jpg',                   'BG');
+    Assets.loadImage('bgLvl1',     '/assets/castle-bg.png',                 'BG');
 
     // pointer for skip
     this._mouseHandler = (e) => this._handlePointer(e);

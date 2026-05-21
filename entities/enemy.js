@@ -64,12 +64,23 @@ export class Enemy {
       return;
     }
 
-    if (!this.audioPlayed && this.audioAppear) {
-      const px = world.player.x + world.player.w/2;
-      const myCx = this.x + this.w/2;
-      const dist = Math.abs(px - myCx);
-      if (dist < 800) {
-        world.audio.play(this.audioAppear);
+    // Intro narration fires only when the enemy is actually VISIBLE inside
+    // the camera viewport — distance-based triggers used to fire while the
+    // enemy was still off-screen, which was queueing voices too early.
+    if (!this.audioPlayed && this.audioAppear && world.camera) {
+      const cam = world.camera;
+      const viewL = cam.x;
+      const viewR = cam.x + cam.viewW;
+      const viewT = cam.y;
+      const viewB = cam.y + cam.viewH;
+      const onScreen =
+        this.x + this.w > viewL && this.x < viewR &&
+        this.y + this.h > viewT && this.y < viewB;
+      if (onScreen) {
+        // Sequential narrative channel — waits for any prior voice line to
+        // finish so intros never collide with stage-start or "between" clips.
+        if (world.audio.playSequential) world.audio.playSequential(this.audioAppear);
+        else world.audio.play(this.audioAppear);
         this.audioPlayed = true;
       }
     }
@@ -167,106 +178,64 @@ export class Enemy {
     ctx.fill();
 
     if (this.dead) {
-      // disintegration
       const t = Math.max(0, this.deathT / 0.6);
       ctx.globalAlpha = t;
     }
 
-    const bob = Math.sin(this.bounceT * 6) * 2;
+    const bob = Math.sin(this.bounceT * 6) * 1.5;
     ctx.save();
     ctx.translate(x + w/2, y + h);
     if (this.facing < 0) ctx.scale(-1, 1);
 
-    // legs
-    ctx.fillStyle = '#0c0e18';
-    ctx.fillRect(-w*0.35, -h*0.45 + bob, w*0.25, h*0.45);
-    ctx.fillRect(w*0.10, -h*0.45 + bob, w*0.25, h*0.45);
+    // Full chibi avatar drawn at body size, scaled up a little so the character
+    // reads clearly against the forest backdrop. The image's own aspect is
+    // honored so the avatar doesn't squash.
+    const img = Assets.get(this.faceKey);
+    const isReal = img && img.naturalWidth > 1;
+    const drawH = h * 1.30;
+    const aspect = isReal ? (img.width / img.height) : 0.66;
+    const drawW = drawH * aspect;
+    const top = -drawH + bob + 4;
 
-    // body
-    ctx.fillStyle = this.def.bodyColor || '#1c2438';
-    if (this.flash > 0) ctx.fillStyle = '#ffffff';
-    ctx.beginPath();
-    ctx.moveTo(-w*0.45, -h*0.40 + bob);
-    ctx.lineTo( w*0.45, -h*0.40 + bob);
-    ctx.lineTo( w*0.40, -h*0.85 + bob);
-    ctx.lineTo(-w*0.40, -h*0.85 + bob);
-    ctx.closePath();
-    ctx.fill();
-
-    // accent stripe
-    ctx.fillStyle = this.def.accent || '#ff2a55';
-    ctx.fillRect(-w*0.45, -h*0.55 + bob, w*0.9, 4);
-
-    // arms (waving)
-    const swing = Math.sin(this.bounceT * 8) * 0.4;
-    ctx.save();
-    ctx.translate(-w*0.42, -h*0.70 + bob);
-    ctx.rotate(swing);
-    ctx.fillStyle = this.def.bodyColor || '#1c2438';
-    ctx.fillRect(-6, 0, 6, h*0.45);
-    ctx.restore();
-    ctx.save();
-    ctx.translate(w*0.42, -h*0.70 + bob);
-    ctx.rotate(-swing);
-    ctx.fillRect(0, 0, 6, h*0.45);
-    ctx.restore();
-
-    // head + face image (face is drawn upright, ignoring flip)
-    const headSize = w * 0.7;
-    const headY = -h * 0.85 - headSize * 0.7 + bob;
-    ctx.save();
-    if (this.facing < 0) ctx.scale(-1, 1); // un-flip for face
-
-    // head bg
-    ctx.fillStyle = '#2a1f2e';
-    ctx.beginPath();
-    ctx.arc(0, headY + headSize/2, headSize/2 + 4, 0, Math.PI*2);
-    ctx.fill();
-
-    const face = Assets.get(this.faceKey);
-    // clip to circle and draw face
-    ctx.save();
-    ctx.beginPath();
-    ctx.arc(0, headY + headSize/2, headSize/2, 0, Math.PI*2);
-    ctx.clip();
-    ctx.drawImage(face, -headSize/2, headY, headSize, headSize);
-    ctx.restore();
-
-    // head ring
-    ctx.strokeStyle = this.def.accent || '#ff2a55';
-    ctx.lineWidth = 2;
-    ctx.beginPath();
-    ctx.arc(0, headY + headSize/2, headSize/2, 0, Math.PI*2);
-    ctx.stroke();
-
-    if (this.flash > 0) {
-      ctx.fillStyle = 'rgba(255,255,255,0.5)';
-      ctx.beginPath();
-      ctx.arc(0, headY + headSize/2, headSize/2, 0, Math.PI*2);
-      ctx.fill();
+    if (isReal) {
+      ctx.drawImage(img, -drawW/2, top, drawW, drawH);
+      if (this.flash > 0) {
+        // white hit-flash over the sprite
+        ctx.globalCompositeOperation = 'source-atop';
+        ctx.fillStyle = 'rgba(255,255,255,0.65)';
+        ctx.fillRect(-drawW/2, top, drawW, drawH);
+        ctx.globalCompositeOperation = 'source-over';
+      }
+    } else {
+      // procedural fallback so the world still works without the asset
+      ctx.fillStyle = this.def.bodyColor || '#1c2438';
+      ctx.fillRect(-w*0.4, -h * 0.9 + bob, w*0.8, h*0.8);
     }
+
+    // Restore axes so HUD-like overlays (HP pips, stun ring) read upright.
     ctx.restore();
 
-    // hp pips above head
+    // ── HP pips floating above the avatar's head ──
     if (!this.dead) {
+      const headTop = y - 6;
       const pips = this.maxHp;
       for (let i = 0; i < pips; i++) {
-        const px = -((pips-1) * 6) + i * 12 - 4;
-        ctx.fillStyle = i < this.hp ? '#ff2a55' : 'rgba(255,255,255,0.18)';
-        ctx.fillRect(px, headY - 14, 8, 4);
+        const px = x + w/2 - ((pips - 1) * 6) + i * 12 - 4;
+        ctx.fillStyle = i < this.hp ? '#ff2a55' : 'rgba(255,255,255,0.20)';
+        ctx.fillRect(px, headTop, 8, 4);
       }
     }
 
+    // ── Stun ring around the avatar ──
     if (this.stunT > 0) {
+      const cx = x + w/2;
+      const cy = y + h * 0.35;
+      const r = w * 0.6 + Math.sin(this.bounceT * 12) * 2;
       ctx.strokeStyle = '#22e1ff';
       ctx.lineWidth = 2;
-      const r = headSize/2 + 6 + Math.sin(this.bounceT * 12) * 2;
-      ctx.beginPath();
-      ctx.arc(0, headY + headSize/2, r, 0, Math.PI*2);
-      ctx.stroke();
+      ctx.beginPath(); ctx.arc(cx, cy, r, 0, Math.PI * 2); ctx.stroke();
     }
 
-    ctx.restore();
     ctx.globalAlpha = 1;
   }
 }

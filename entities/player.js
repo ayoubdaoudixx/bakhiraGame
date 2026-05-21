@@ -1,4 +1,4 @@
-// Player entity. Uses /assets/characters/main-character.png as the avatar
+// Player entity. Uses /assets/hero.png as the avatar
 // (sprite is drawn body-shaped; missing asset falls back to a procedural figure).
 
 import { PHYSICS, integrate, applyHorizontal } from '../engine/physics.js';
@@ -37,7 +37,7 @@ export class Player {
     this.respawnPoint = { x, y };
     this.spawnEffectT = 0.6;
 
-    Assets.loadImage('player', '/assets/characters/main-character.png', 'PLAYER');
+    Assets.loadImage('player', '/assets/hero.png', 'PLAYER');
   }
 
   pickupWeapon(id) {
@@ -77,6 +77,9 @@ export class Player {
       this.lives--;
       this.health = this.maxHealth;
       this.dead = (this.lives < 0);
+      // Set a one-frame signal so the game loop can react (e.g. full level
+      // restart if this death happened inside the boss arena).
+      this.diedThisFrame = true;
       if (!this.dead) {
         this.x = this.respawnPoint.x;
         this.y = this.respawnPoint.y;

@@ -1,0 +1,16 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(node --check game.js)",
+      "Bash(node --check ui/screens.js)",
+      "Bash(python3 -m http.server 8765)",
+      "Bash(curl -sI http://localhost:8765/index.html)",
+      "Bash(curl -sI http://localhost:8765/ui/screens.js)",
+      "Bash(curl -sI http://localhost:8765/game.js)"
+    ],
+    "additionalDirectories": [
+      "/tmp",
+      "/private/tmp"
+    ]
+  }
+}

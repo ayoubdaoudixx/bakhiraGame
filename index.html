@@ -3,96 +3,259 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-<title>Bakhira Game</title>
+<title>BAKHIRA · The Cursed Stream</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Anton&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Bangers&family=Bungee&family=Oswald:wght@500;700&family=Special+Elite&family=VT323&display=swap" rel="stylesheet">
 <style>
   :root{
-    --ink:#04060b;
-    --ink-2:#0a0f1a;
-    --neon:#ff2a55;
-    --neon-2:#22e1ff;
-    --gold:#ffcc33;
-    --bone:#e8eef7;
+    --ink:#0a0a12;
+    --ink-2:#14141f;
+    --paper:#efe7d3;
+    --paper-2:#e8dec3;
+    --bone:#d8cdb0;
+    --night:#0d1628;
+    --night-2:#1a2540;
+    --night-3:#243152;
+    --caption:#f5db7a;
+    --caption-2:#e8c652;
+    --curse:#c44a8c;
+    --curse-deep:#6e2153;
+    --blood:#c8323a;
+    --blood-deep:#7a1a22;
+    --gold:#e8b04a;
+    --green:#5fa05a;
+    --cyan:#5fb6c8;
   }
   *{box-sizing:border-box}
-  html,body{margin:0;padding:0;height:100%;background:var(--ink);color:var(--bone);overflow:hidden;font-family:'JetBrains Mono',monospace;}
-  body{
-    display:flex;align-items:center;justify-content:center;
-    background:
-      radial-gradient(1200px 600px at 50% 20%, rgba(255,42,85,.10), transparent 70%),
-      radial-gradient(900px 500px at 80% 90%, rgba(34,225,255,.08), transparent 70%),
-      linear-gradient(180deg,#04060b 0%, #02030a 100%);
-  }
-  #stage{
-    position:relative;
-    width:100vw;height:100vh;
+  html,body{
+    margin:0;padding:0;height:100%;
+    background:var(--ink);
+    color:var(--paper);
     overflow:hidden;
+    font-family:'Special Elite','Courier New',monospace;
   }
-  canvas{
-    display:block;
-    width:100%;height:100%;
-    image-rendering:pixelated;
-    image-rendering:crisp-edges;
-    background:#000;
-  }
-  /* faint scanline + vignette overlay */
+  body{display:flex;align-items:center;justify-content:center;background:#2a2a35;}
+  #stage{position:relative;width:100vw;height:100vh;overflow:hidden;background:var(--ink);}
+  canvas{display:block;width:100%;height:100%;image-rendering:pixelated;image-rendering:crisp-edges;background:#000;}
+
+  /* Subtle scanline overlay above the canvas */
   #stage::after{
     content:"";position:absolute;inset:0;pointer-events:none;
-    background:
-      repeating-linear-gradient(0deg, rgba(255,255,255,.025) 0 1px, transparent 1px 3px),
-      radial-gradient(120% 80% at 50% 50%, transparent 55%, rgba(0,0,0,.55) 100%);
-    mix-blend-mode:overlay;
+    background:repeating-linear-gradient(0deg, rgba(0,0,0,0.08) 0 1px, transparent 1px 3px);
+    z-index:50;
   }
+
+  /* ===== BOOT SCREEN (Title) ===== */
   #boot{
-    position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;
-    z-index:5; text-align:center; gap:18px;
-    background:linear-gradient(180deg,#02030a 0%, #04060b 100%);
+    position:absolute;inset:0;z-index:5;
+    display:flex;align-items:stretch;justify-content:stretch;
+    overflow:hidden;
     transition:opacity .6s ease;
   }
   #boot.hidden{opacity:0;pointer-events:none}
-  #boot h1{
-    font-family:'Anton','Bebas Neue',sans-serif;
-    font-size:clamp(48px,9vw,140px);
-    letter-spacing:.04em;
-    margin:0; line-height:.9;
-    background:linear-gradient(180deg,#fff 0%, #ff2a55 60%, #7a0a1f 100%);
-    -webkit-background-clip:text; background-clip:text; color:transparent;
-    text-shadow:0 0 30px rgba(255,42,85,.25);
+
+  /* castle bg layer */
+  #boot .bg{
+    position:absolute;inset:0;
+    background-image:url('assets/castle-bg.png');
+    background-size:cover;background-position:center;
+    z-index:0;
   }
-  #boot h1 .small{display:block; font-size:.28em; letter-spacing:.5em; color:#22e1ff; -webkit-text-fill-color:#22e1ff; margin-bottom:.5em}
-  #boot p{max-width:560px;color:#9aa3b2;letter-spacing:.06em;font-size:13px}
-  #boot button{
+  #boot .bg-tint{
+    position:absolute;inset:0;
+    background:linear-gradient(180deg, rgba(10,10,18,0.45) 0%, rgba(10,10,18,0.92) 100%);
+    z-index:1;
+  }
+  #boot .halftone{
+    position:absolute;inset:0;
+    background-image:radial-gradient(rgba(0,0,0,0.32) 1px, transparent 1.5px);
+    background-size:6px 6px;
+    opacity:0.22;
+    z-index:2;
+  }
+
+  /* hero portrait on the right */
+  #boot .hero-img{
+    position:absolute;
+    bottom:-10px;right:6%;
+    height:78%;
+    z-index:3;
+    filter:drop-shadow(10px 0 0 var(--ink)) drop-shadow(-6px 0 0 var(--ink)) drop-shadow(0 12px 0 rgba(0,0,0,0.4));
+    pointer-events:none;
+  }
+  #boot .sfx{
+    position:absolute;bottom:34%;right:30%;z-index:3;
+    font-family:'Bangers','Bungee',sans-serif;letter-spacing:0.04em;
+    font-size:clamp(40px,7vw,86px);
+    color:var(--blood);
+    -webkit-text-stroke:3px var(--ink);
+    text-shadow:6px 6px 0 var(--ink);
+    transform:rotate(-8deg);
+    pointer-events:none;
+  }
+
+  /* chip / caption */
+  .chip{
+    background:var(--ink);color:var(--paper);
+    font-family:'Bangers',sans-serif;letter-spacing:0.08em;
+    font-size:13px;padding:4px 10px;border:2px solid var(--ink);
+    display:inline-block;
+  }
+  .caption{
+    background:var(--caption);border:2px solid var(--ink);
+    box-shadow:3px 3px 0 var(--ink);
+    padding:8px 12px;
+    font-family:'Special Elite',monospace;font-size:13px;
+    text-transform:uppercase;line-height:1.2;color:var(--ink);
+  }
+
+  #boot .top-left{position:absolute;top:24px;left:24px;max-width:280px;z-index:6;}
+  #boot .top-right{position:absolute;top:24px;right:24px;z-index:6;}
+
+  /* logo center */
+  #boot .logo-wrap{
+    position:absolute;top:18%;left:50%;transform:translateX(-50%);
+    text-align:center;z-index:5;width:90%;
+  }
+  #boot .logo{
+    font-family:'Bangers','Impact',sans-serif;
+    font-size:clamp(64px,12vw,140px);
+    line-height:.82;letter-spacing:0.03em;
+    color:var(--caption);
+    -webkit-text-stroke:5px var(--ink);
+    text-shadow:8px 8px 0 var(--curse-deep), 8px 8px 0 var(--ink);
+    margin:0;
+  }
+  #boot .logo .dot{color:var(--curse)}
+  #boot .tagline{
+    font-family:'Bungee','Impact',sans-serif;
+    font-size:clamp(14px,1.9vw,26px);
+    color:var(--paper);
+    letter-spacing:0.25em;
     margin-top:8px;
-    background:transparent; color:var(--bone);
-    border:1px solid rgba(232,238,247,.25);
-    padding:14px 28px;
-    font-family:'Anton',sans-serif; letter-spacing:.3em; font-size:18px;
-    cursor:pointer; position:relative; overflow:hidden;
-    transition:transform .15s ease, border-color .15s ease, color .15s ease;
+    text-shadow:3px 3px 0 var(--curse-deep);
   }
-  #boot button:hover{ color:#04060b; border-color:var(--neon); }
-  #boot button::before{
-    content:""; position:absolute; inset:0; background:var(--neon);
-    transform:translateY(101%); transition:transform .25s ease; z-index:-1;
+
+  /* menu / start cluster */
+  #boot .menu{
+    position:absolute;bottom:60px;left:7%;
+    display:flex;flex-direction:column;gap:12px;
+    z-index:6;
+    align-items:flex-start;
   }
-  #boot button:hover::before{ transform:translateY(0); }
-  #boot .hint{font-size:13px;color:#ffffff;letter-spacing:.18em;font-weight:600;text-shadow:0 2px 8px rgba(0,0,0,.6);max-width:760px;line-height:1.6}
-  #boot .hint b{color:#ffcc33;font-weight:800;font-family:'Anton',sans-serif;letter-spacing:.05em;font-size:15px}
-  #loadbar{width:280px;height:2px;background:rgba(255,255,255,.08);overflow:hidden;margin-top:12px}
-  #loadbar > div{height:100%;width:0;background:linear-gradient(90deg,#22e1ff,#ff2a55);transition:width .2s ease}
+  #boot .menu-row{
+    display:flex;gap:10px;flex-wrap:wrap;
+  }
+  #boot .menu-row .btn-comic{
+    font-size:18px;padding:8px 16px;
+  }
+  #boot p.story{
+    font-family:'Special Elite',monospace;
+    color:var(--paper);opacity:0.85;
+    max-width:540px;letter-spacing:0.04em;font-size:14px;
+    margin:0 0 8px 0;
+    text-shadow:1px 1px 0 var(--ink);
+  }
+  .btn-comic{
+    background:var(--caption);
+    border:3px solid var(--ink);
+    box-shadow:4px 4px 0 var(--ink);
+    padding:12px 22px;
+    font-family:'Bangers',sans-serif;letter-spacing:0.06em;
+    font-size:22px;color:var(--ink);
+    cursor:pointer;display:inline-flex;align-items:center;gap:10px;
+    transition:transform .08s ease, box-shadow .08s ease;
+    text-decoration:none;
+  }
+  .btn-comic.primary{background:var(--blood);color:var(--paper);}
+  .btn-comic:hover{transform:translate(-1px,-1px);box-shadow:5px 5px 0 var(--ink);}
+  .btn-comic:active{transform:translate(2px,2px);box-shadow:1px 1px 0 var(--ink);}
+  .btn-comic:disabled{opacity:0.55;cursor:not-allowed;}
+  .btn-comic .arrow{color:var(--caption);font-size:18px;}
+
+  /* load bar styled as comic chip */
+  #loadbar{
+    width:280px;height:10px;
+    background:var(--ink);border:2px solid var(--paper);
+    overflow:hidden;
+  }
+  #loadbar > div{
+    height:100%;width:0;
+    background:linear-gradient(90deg, var(--caption), var(--curse));
+    transition:width .2s ease;
+  }
+
+  /* controls hint at bottom */
+  #boot .controls{
+    position:absolute;bottom:20px;right:24px;z-index:6;
+    display:flex;gap:6px;align-items:center;flex-wrap:wrap;justify-content:flex-end;
+    max-width:60%;
+    font-family:'Special Elite',monospace;font-size:11px;color:var(--paper);letter-spacing:0.1em;
+  }
+  #boot .controls .chip{padding:3px 8px;font-size:11px;}
+  #boot .press-start{
+    position:absolute;bottom:54px;right:24px;
+    font-family:'VT323',monospace;font-size:22px;color:var(--caption);
+    z-index:6;
+    animation:blink 1.2s infinite;
+    text-shadow:2px 2px 0 var(--ink);
+  }
+  @keyframes blink { 0%, 60% { opacity: 1; } 60.1%, 100% { opacity: 0.2; } }
+
+  /* responsive — squeeze when short */
+  @media (max-height:560px){
+    #boot .menu{bottom:18px;}
+    #boot .controls{display:none}
+    #boot .press-start{display:none}
+    #boot .logo-wrap{top:8%}
+  }
 </style>
 </head>
 <body>
   <div id="stage">
     <canvas id="game" width="1280" height="720"></canvas>
+
     <div id="boot">
-      <h1><span class="small">A Stadium. A Curse.</span>Bakhira<br>Game</h1>
-      <p>The crowd is gone. The lights have died. Take back what was stolen.</p>
-      <div id="loadbar"><div></div></div>
-      <button id="startBtn" disabled>LOADING…</button>
-      <div class="hint"><b>← →</b> MOVE &nbsp;·&nbsp; <b>↑</b> JUMP (×2) &nbsp;·&nbsp; <b>SPACE</b> ATTACK &nbsp;·&nbsp; <b>K</b> SWAP &nbsp;·&nbsp; <b>ESC</b> PAUSE</div>
+      <div class="bg"></div>
+      <div class="bg-tint"></div>
+      <div class="halftone"></div>
+
+      <div class="top-left">
+        <div class="caption">A STREAMER. A KIDNAPPING.<br/>A VERY ANGRY BAT.</div>
+      </div>
+      <div class="top-right">
+        <span class="chip">v0.1 · DEMO BUILD</span>
+      </div>
+
+      <div class="logo-wrap">
+        <h1 class="logo">BAKHIRA<span class="dot">.</span></h1>
+        <div class="tagline">THE CURSED STREAM</div>
+      </div>
+
+      <img class="hero-img" src="assets/hero.png" alt="Bakhira" />
+      <div class="sfx">SWING!</div>
+
+      <div class="menu">
+        <p class="story">The crowd is gone. The lights have died. The streamer's girl was taken — now he swings a bat, and the curse swings back.</p>
+        <div id="loadbar"><div></div></div>
+        <button id="startBtn" class="btn-comic primary" disabled>
+          <span class="arrow">▶</span> LOADING…
+        </button>
+        <div class="menu-row">
+          <button id="stageBtn" class="btn-comic" type="button">STAGE SELECT</button>
+          <button id="weaponsBtn" class="btn-comic" type="button">WEAPONS</button>
+        </div>
+      </div>
+
+      <div class="press-start">▼ PRESS [ENTER] TO BEGIN</div>
+      <div class="controls">
+        <span class="chip" style="background:var(--paper);color:var(--ink);">← →</span><span>MOVE</span>
+        <span class="chip" style="background:var(--paper);color:var(--ink);">↑</span><span>JUMP ×2</span>
+        <span class="chip" style="background:var(--blood);color:var(--paper);">SPACE</span><span>SWING</span>
+        <span class="chip" style="background:var(--curse);color:var(--paper);">K</span><span>SWAP</span>
+        <span class="chip" style="background:var(--ink);color:var(--paper);">ESC</span><span>PAUSE</span>
+      </div>
     </div>
   </div>
   <script type="module" src="./game.js"></script>

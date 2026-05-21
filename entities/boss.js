@@ -40,7 +40,7 @@ export class Boss {
     this.phase = 1;
     this.eyeShake = 0;
 
-    Assets.loadImage('bossLvl1', '/assets/characters/boss-Lvl1.png', 'BOSS');
+    Assets.loadImage('bossLvl1', '/assets/enemies/boss-lvl1.png', 'BOSS');
   }
 
   trigger() {
@@ -177,6 +177,17 @@ export class Boss {
     const prevX = this.x, prevY = this.y;
     integrate(this, dt);
     resolveSolids(this, world.solids, prevX, prevY);
+
+    // Clamp to the boss arena so he can't walk off the platform edge.
+    // The gate + backwall solids will also do this physically, but a hard
+    // clamp guarantees no edge-case escapes.
+    if (world.arena) {
+      const a = world.arena;
+      const minX = a.x + 40;
+      const maxX = a.x + a.w - 40 - this.w;
+      if (this.x < minX) { this.x = minX; this.vx = Math.max(0, this.vx); }
+      if (this.x > maxX) { this.x = maxX; this.vx = Math.min(0, this.vx); }
+    }
 
     // contact damage to player
     if (!player.dead && player.invuln <= 0) {

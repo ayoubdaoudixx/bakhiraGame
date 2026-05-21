@@ -1,5 +1,5 @@
-// Renderer: stadium photo as level background with night tinting + parallax.
-// Falls back to a procedural gradient if the image hasn't loaded yet.
+// Forest renderer — dawn-haze sky + parallax tree silhouettes + dark forest soil.
+// Procedurally drawn so we don't depend on a forest background image.
 
 import { Assets } from '../core/assets.js';
 
@@ -11,7 +11,9 @@ export class Renderer {
     this.W = canvas.width;
     this.H = canvas.height;
     this.t = 0;
-    Assets.loadImage('bgLvl1', '/assets/bg-lvl1.jpg', 'BG');
+
+    // Seed parallax tree silhouette layers once — deterministic across frames.
+    this._layers = this._buildTreeLayers();
   }
 
   resize() {
@@ -19,108 +21,179 @@ export class Renderer {
     this.H = this.canvas.height;
   }
 
+  // Pre-generate three parallax layers of trees with fixed positions per layer.
+  // Each tree: { x, height, width } in layer-local coords (0..tileW).
+  _buildTreeLayers() {
+    const rng = mulberry32(0x9E3779B1);
+    function makeLayer(count, baseY, hMin, hMax, wMin, wMax) {
+      const trees = [];
+      for (let i = 0; i < count; i++) {
+        trees.push({
+          x: rng() * 2400,             // tile width 2400 — repeats
+          height: hMin + rng() * (hMax - hMin),
+          width:  wMin + rng() * (wMax - wMin),
+          lean:   (rng() - 0.5) * 0.06,
+          seed:   rng(),
+        });
+      }
+      trees.sort((a, b) => a.x - b.x);
+      return { trees, tileW: 2400, baseY };
+    }
+    return {
+      far:  makeLayer(28, 0.66, 90,  170, 60,  120),
+      mid:  makeLayer(22, 0.74, 140, 240, 110, 180),
+      near: makeLayer(14, 0.84, 220, 360, 160, 260),
+    };
+  }
+
   drawBackground(camX, dt) {
     const ctx = this.ctx, W = this.W, H = this.H;
     this.t += dt;
 
-    // Base sky fill so corners are never empty.
-    ctx.fillStyle = '#02030a';
+    // Fallback sky in case the photo isn't loaded yet.
+    const sky = ctx.createLinearGradient(0, 0, 0, H);
+    sky.addColorStop(0.00, '#3a5870');
+    sky.addColorStop(0.55, '#c8a378');
+    sky.addColorStop(1.00, '#3a4a30');
+    ctx.fillStyle = sky;
     ctx.fillRect(0, 0, W, H);
 
-    const bg = Assets.get('bgLvl1');
-    const isReal = Assets.isReal('bgLvl1');
-
-    if (isReal) {
-      // Cover-fit the photo to the canvas with light parallax (slower than world).
+    // ── Real forest photo as the base background (golden-hour pines) ──
+    const bg = Assets.get('stage1Bg');
+    if (Assets.isReal('stage1Bg')) {
+      // Cover-fit the image to the viewport, gently parallax with camera.
       const aspectImg = bg.width / bg.height;
       const aspectView = W / H;
       let dw, dh;
-      if (aspectImg > aspectView) { dh = H * 1.10; dw = dh * aspectImg; }
-      else { dw = W * 1.10; dh = dw / aspectImg; }
+      if (aspectImg > aspectView) { dh = H * 1.06; dw = dh * aspectImg; }
+      else { dw = W * 1.06; dh = dw / aspectImg; }
+      // Slow horizontal parallax — the photo drifts a fraction of the camera speed
+      // and seamlessly cycles so it never runs out across the long level.
+      const parX = (camX * 0.18) % dw;
+      const baseX = (W - dw) / 2 - parX;
+      const dy = (H - dh) / 2 - 20;
+      ctx.drawImage(bg, baseX, dy, dw, dh);
+      ctx.drawImage(bg, baseX + dw, dy, dw, dh);
 
-      const offX = -((camX * 0.18) % (dw)) * 0.5; // gentle horizontal drift
-      const dx = (W - dw) / 2 + offX * 0.3;
-      const dy = (H - dh) / 2 - 30;
-
-      ctx.drawImage(bg, dx, dy, dw, dh);
-    } else {
-      // Procedural fallback while the image loads.
-      const grad = ctx.createLinearGradient(0, 0, 0, H);
-      grad.addColorStop(0, '#0a0414');
-      grad.addColorStop(1, '#02030a');
-      ctx.fillStyle = grad;
+      // Warm dusk tint over the photo so the foreground UI/terrain pops.
+      const tint = ctx.createLinearGradient(0, 0, 0, H);
+      tint.addColorStop(0.0, 'rgba(36,28,18,0.25)');
+      tint.addColorStop(0.6, 'rgba(20,16,10,0.18)');
+      tint.addColorStop(1.0, 'rgba(10,8,6,0.55)');
+      ctx.fillStyle = tint;
       ctx.fillRect(0, 0, W, H);
     }
 
-    // Night-mood overlay: deep blue tint + vignette.
-    ctx.fillStyle = 'rgba(6,10,28,0.55)';
-    ctx.fillRect(0, 0, W, H);
+    // ── One near layer of dark tree silhouettes for foreground depth.
+    // The photo already provides the sky / horizon / distant trees, so we only
+    // add a closer dark band to anchor the platforms against. ──
+    this._drawTreeLayer(ctx, this._layers.near, camX * 0.78, '#0a140f', 1.00);
 
-    // Stadium-light haze from the top
-    const topGlow = ctx.createLinearGradient(0, 0, 0, H * 0.5);
-    topGlow.addColorStop(0, 'rgba(255,225,180,0.18)');
-    topGlow.addColorStop(1, 'rgba(255,225,180,0)');
-    ctx.fillStyle = topGlow;
-    ctx.fillRect(0, 0, W, H * 0.5);
-
-    // Distant moon, kept for the dramatic night feel
-    const mx = W * 0.82, my = H * 0.18;
-    const pulse = 1 + Math.sin(this.t * 1.2) * 0.05;
-    const rg = ctx.createRadialGradient(mx, my, 0, mx, my, 200 * pulse);
-    rg.addColorStop(0, 'rgba(255,170,180,0.45)');
-    rg.addColorStop(0.4, 'rgba(180,80,120,0.15)');
-    rg.addColorStop(1, 'rgba(0,0,0,0)');
-    ctx.fillStyle = rg;
-    ctx.fillRect(0, 0, W, H);
-    ctx.fillStyle = '#ffd1c8';
-    ctx.beginPath(); ctx.arc(mx, my, 44 * pulse, 0, Math.PI * 2); ctx.fill();
-    ctx.fillStyle = 'rgba(40,10,30,0.35)';
-    ctx.beginPath(); ctx.arc(mx + 14, my - 6, 44 * pulse, 0, Math.PI * 2); ctx.fill();
-
-    // A few bright neon flickers — stadium floodlights catching on something
-    ctx.fillStyle = '#ffcc33';
-    for (let i = 0; i < 6; i++) {
-      const fx = ((i * 211 - camX * 0.4) % W + W) % W;
-      const fy = H * 0.10 + (i % 2) * 6;
-      const a = 0.4 + 0.4 * Math.sin(this.t * 8 + i);
-      ctx.globalAlpha = a;
-      ctx.fillRect(fx, fy, 3, 2);
+    // ── Light particles (firefly / dust motes) — small, subtle ──
+    ctx.save();
+    ctx.globalAlpha = 0.22;
+    for (let i = 0; i < 10; i++) {
+      const fx = ((i * 137 + this.t * 18) % (W + 60)) - 30;
+      const fy = ((i * 71  + this.t * 6 ) % (H * 0.6)) + H * 0.20;
+      const r = 0.6 + (i % 2) * 0.3;
+      ctx.fillStyle = i % 2 === 0 ? 'rgba(255,236,170,0.9)' : 'rgba(255,220,160,0.7)';
+      ctx.beginPath(); ctx.arc(fx, fy, r, 0, Math.PI * 2); ctx.fill();
     }
-    ctx.globalAlpha = 1;
+    ctx.restore();
 
-    // Bottom horizon shadow so the level platforms read against it.
-    const bottom = ctx.createLinearGradient(0, H * 0.55, 0, H);
-    bottom.addColorStop(0, 'rgba(2,3,10,0)');
-    bottom.addColorStop(1, 'rgba(2,3,10,0.85)');
-    ctx.fillStyle = bottom;
-    ctx.fillRect(0, H * 0.55, W, H * 0.45);
-
-    // Subtle red atmospheric haze low — keeps the "revenge" feel
-    const danger = ctx.createLinearGradient(0, H * 0.7, 0, H);
-    danger.addColorStop(0, 'rgba(255,42,85,0)');
-    danger.addColorStop(1, 'rgba(255,42,85,0.10)');
-    ctx.fillStyle = danger;
-    ctx.fillRect(0, H * 0.7, W, H * 0.3);
+    // ── Subtle halftone (pulp comic feel, very light) ──
+    ctx.save();
+    ctx.globalAlpha = 0.06;
+    ctx.fillStyle = '#0a0a12';
+    const step = 9;
+    const offX = ((camX * 0.05) % step + step) % step;
+    for (let yy = 0; yy < H; yy += step) {
+      for (let xx = -step; xx < W; xx += step) {
+        ctx.beginPath();
+        ctx.arc(xx + offX, yy, 1, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    }
+    ctx.restore();
   }
 
-  // Draw a stylized street ground at world Y.
-  drawGround(camX, worldW, groundY) {
-    const ctx = this.ctx;
+  _drawTreeLayer(ctx, layer, scrollX, color, alpha) {
+    const ctxW = this.W, ctxH = this.H;
+    const baseY = ctxH * layer.baseY;
     ctx.save();
-    ctx.translate(-camX, 0);
-    const grad = ctx.createLinearGradient(0, groundY, 0, this.H + 200);
-    grad.addColorStop(0, '#0c1020');
-    grad.addColorStop(1, '#04060c');
+    ctx.globalAlpha = alpha;
+    ctx.fillStyle = color;
+
+    // Repeat layer tile across the screen
+    const tileW = layer.tileW;
+    const offset = ((scrollX % tileW) + tileW) % tileW;
+    // start a tile to the left so leftmost trees are visible
+    for (let tileStart = -tileW - offset; tileStart < ctxW + tileW; tileStart += tileW) {
+      for (const tr of layer.trees) {
+        const x = tileStart + tr.x;
+        if (x < -tr.width || x > ctxW + tr.width) continue;
+        this._drawConifer(ctx, x, baseY, tr.width, tr.height, tr.lean, tr.seed);
+      }
+    }
+    ctx.restore();
+  }
+
+  // Stylized conifer silhouette — stacked triangles + trunk, slight lean.
+  _drawConifer(ctx, x, baseY, w, h, lean, seed) {
+    const trunkW = Math.max(8, w * 0.16);
+    const trunkH = h * 0.18;
+    // trunk
+    ctx.beginPath();
+    ctx.moveTo(x - trunkW / 2, baseY);
+    ctx.lineTo(x + trunkW / 2, baseY);
+    ctx.lineTo(x + trunkW / 2 + lean * 6, baseY - trunkH);
+    ctx.lineTo(x - trunkW / 2 + lean * 6, baseY - trunkH);
+    ctx.closePath();
+    ctx.fill();
+
+    // canopy — three overlapping triangles
+    const top = baseY - h;
+    const canopyBase = baseY - trunkH;
+    const tiers = 3;
+    for (let i = 0; i < tiers; i++) {
+      const f = i / (tiers - 1);
+      const y0 = canopyBase - f * (canopyBase - top) * 0.95;
+      const y1 = y0 - (h * 0.45 * (1 - i * 0.18));
+      const halfW = (w / 2) * (1 - i * 0.22);
+      const leanX = lean * (canopyBase - y0);
+      ctx.beginPath();
+      ctx.moveTo(x - halfW + leanX, y0);
+      ctx.lineTo(x + halfW + leanX, y0);
+      ctx.lineTo(x + leanX * 1.4, y1);
+      ctx.closePath();
+      ctx.fill();
+    }
+  }
+
+  // World-space dark "void" beneath all platforms (called after camera.apply).
+  // Fills from groundY down to far below the world. Keeps signature for game.js compat.
+  drawGround(_camX, worldW, groundY) {
+    const ctx = this.ctx;
+    // Deep forest soil — fills any gap visible below the terrain blocks.
+    const grad = ctx.createLinearGradient(0, groundY, 0, groundY + 800);
+    grad.addColorStop(0.0, '#1a1208');
+    grad.addColorStop(1.0, '#050302');
     ctx.fillStyle = grad;
-    ctx.fillRect(0, groundY, worldW, this.H * 2);
+    ctx.fillRect(-200, groundY, worldW + 400, 1600);
 
-    ctx.fillStyle = '#ff2a55';
-    ctx.globalAlpha = 0.55;
-    ctx.fillRect(0, groundY - 2, worldW, 2);
-    ctx.globalAlpha = 1;
-
-    ctx.fillStyle = 'rgba(34,225,255,0.25)';
-    for (let x = 0; x < worldW; x += 80) ctx.fillRect(x, groundY + 36, 30, 2);
+    // Faint root striations for depth
+    ctx.save();
+    ctx.globalAlpha = 0.25;
+    ctx.strokeStyle = '#2a1a08';
+    ctx.lineWidth = 2;
+    for (let i = 0; i < 30; i++) {
+      const x = (i * 287) % worldW;
+      const y = groundY + 40 + (i * 53) % 240;
+      ctx.beginPath();
+      ctx.moveTo(x, y);
+      ctx.bezierCurveTo(x + 20, y + 30, x + 60, y - 10, x + 100, y + 40);
+      ctx.stroke();
+    }
     ctx.restore();
   }
 
@@ -129,4 +202,15 @@ export class Renderer {
     ctx.fillStyle = `rgba(2,3,10,${alpha})`;
     ctx.fillRect(0, 0, this.W, this.H);
   }
+}
+
+// Cheap deterministic PRNG so tree silhouettes are stable across reloads.
+function mulberry32(a) {
+  return function () {
+    a |= 0; a = (a + 0x6D2B79F5) | 0;
+    let t = a;
+    t = Math.imul(t ^ (t >>> 15), t | 1);
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
 }

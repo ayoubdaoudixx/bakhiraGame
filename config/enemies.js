@@ -5,35 +5,35 @@ export const ENEMIES = [
   {
     id: 'enemy1',
     name: 'The Blocker',
-    facePng: 'enemy1-face.jpeg',     // dash + jpeg per current asset folder
+    facePng: 'enemy1.png',
     hp: 3,
     speed: 90,
     behavior: 'patrol',              // patrol | chase | jump | ranged
     scale: 1.0,
-    bodyColor: '#1c2438',
-    accent: '#ff2a55',
+    bodyColor: '#2a3a1a',            // forest-green tunic
+    accent: '#a8d038',
   },
   {
     id: 'enemy2',
     name: 'The Sprinter',
-    facePng: 'enemy2-face.jpeg',
+    facePng: 'enemy2.png',
     hp: 3,
     speed: 160,
     behavior: 'chase',
     scale: 0.95,
-    bodyColor: '#2a1a30',
-    accent: '#22e1ff',
+    bodyColor: '#3a2a18',            // bark-brown
+    accent: '#e8c44a',
   },
   {
     id: 'enemy3',
     name: 'The Hurler',
-    facePng: 'enemy3-face.jpeg',
+    facePng: 'enemy3.png',
     hp: 3,
     speed: 70,
     behavior: 'ranged',
     scale: 1.05,
-    bodyColor: '#1a2a22',
-    accent: '#ffcc33',
+    bodyColor: '#1f3326',            // pine-shadow
+    accent: '#f0a050',
   },
 ];
 

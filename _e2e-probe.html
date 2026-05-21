@@ -1,0 +1,97 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>e2e audio probe</title>
+<style>body{font-family:monospace;background:#111;color:#eee;padding:14px}
+#log{white-space:pre-wrap;font-size:13px}</style></head>
+<body>
+<div id="log"></div>
+<iframe id="frame" src="http://localhost:8123/index.html" width="1280" height="240" style="display:block;border:0;margin-top:14px"></iframe>
+<script>
+const log = document.getElementById('log');
+function L(...a){ log.textContent += a.join(' ') + '\n'; }
+
+const f = document.getElementById('frame');
+f.onload = async () => {
+  const w = f.contentWindow;
+  for (let i = 0; i < 80; i++) {
+    if (w.__game && w.__game.audio) break;
+    await new Promise(r => setTimeout(r, 100));
+  }
+  if (!w.__game) { L('FAIL: no game'); return; }
+  const Audio = w.__game.audio;
+  const events = [];
+  const origSeq = Audio.playSequential.bind(Audio);
+  Audio.playSequential = function(name, opts) {
+    events.push({ kind: 'queue', name, at: (performance.now()|0) + 'ms' });
+    return origSeq(name, opts);
+  };
+
+  const sb = w.document.getElementById('startBtn');
+  for (let i = 0; i < 50; i++) { if (!sb.disabled) break; await new Promise(r => setTimeout(r, 100)); }
+  sb.click();
+  L('Clicked START.');
+
+  for (let i = 0; i < 30 && !Audio.ctx; i++) await new Promise(r => setTimeout(r, 50));
+  if (Audio.ctx) {
+    const ctx = Audio.ctx;
+    const origCreate = ctx.createBufferSource.bind(ctx);
+    ctx.createBufferSource = function() {
+      const s = origCreate();
+      const origStart = s.start.bind(s);
+      s.start = function(...a) {
+        let name = '?';
+        for (const [k, v] of Audio.buffers.entries()) { if (v === s.buffer) { name = k; break; } }
+        events.push({ kind: 'START', name, at: (performance.now()|0) + 'ms' });
+        return origStart(...a);
+      };
+      return s;
+    };
+  }
+  L('ctx state =', Audio.ctx ? Audio.ctx.state : '(none)');
+
+  // Wait for game-start to actually fire.
+  await new Promise(r => setTimeout(r, 800));
+
+  // Snap player + camera so enemy1 is on-screen.
+  w.__game.player.x = 850;
+  w.__game.camera.x = 200;
+  w.__game.camera.target = null;  // prevent the camera from lerping away
+  L('Snapped. Camera fixed at x=200. Enemy1 should be visible.');
+
+  // Pump the game's _update directly (bypass RAF throttling in headless).
+  // This calls into the same code path as the running loop.
+  const tick = (n) => { for (let i = 0; i < n; i++) w.__game._update(1/60); };
+
+  // Tick a few frames to let enemy1.audioPlayed flip + queue intro.
+  tick(8);
+  L('After 8 ticks — voice queue:', Audio._voiceQueue.map(x => x.name));
+
+  // Kill enemy1 and tick enough frames for deathT to expire (>= 36 frames at 1/60).
+  const e1 = w.__game.world.enemies.find(e => e.id === 'enemy1');
+  if (e1) {
+    e1.takeHit(99, 1);
+    L('takeHit applied. enemy1.dead =', e1.dead, '  deathT =', e1.deathT);
+    tick(50);
+    L('After 50 more ticks — enemies remaining:', w.__game.world.enemies.length,
+      '  voice queue:', Audio._voiceQueue.map(x => x.name));
+  } else {
+    L('Enemy1 not found!');
+  }
+
+  // Wait for the queue to actually drain through real playback.
+  await new Promise(r => setTimeout(r, 4000));
+
+  L('\n=== Event log ===');
+  for (const e of events) L(`  [${e.kind.padEnd(5)}] ${e.name.padEnd(20)}  @${e.at}`);
+
+  const queued = events.filter(e => e.kind === 'queue').map(e => e.name);
+  const started = events.filter(e => e.kind === 'START').map(e => e.name);
+  L('\nQueued :', JSON.stringify(queued));
+  L('Started:', JSON.stringify(started));
+  const want = ['game-start','enemy1-intro','enemy1-defeat'];
+  L('Queue order correct :', JSON.stringify(queued) === JSON.stringify(want) ? 'PASS' : 'FAIL');
+  L('All three started   :',
+    started.includes('game-start') && started.includes('enemy1-intro') && started.includes('enemy1-defeat')
+    ? 'PASS' : 'FAIL');
+};
+</script>
+</body></html>
